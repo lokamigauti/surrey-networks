@@ -1,0 +1,92 @@
+---
+title: "Woking Network"
+output: html_notebook
+---
+
+# Woking Greens Network
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE, fig.show='hide'}
+# libraries
+
+library(tidyverse)
+library(openair)
+
+# set variables
+filedir <- "G:/My Drive/IC/Doutorado/Sandwich/Data/WokingNetwork/"
+
+index_names <- c("date",
+                 "aqi",
+                 "h_aqi",
+                 "pm1",
+                 "h_pm1",
+                 "pm25",
+                 "h_pm25",
+                 "pm10",
+                 "h_pm10",
+                 "temp",
+                 "h_temp",
+                 "l_temp",
+                 "rh",
+                 "h-rh",
+                 "l-rh",
+                 "dew",
+                 "h_dew",
+                 "l_dew",
+                 "wetbulb",
+                 "h_wetbulb",
+                 "l_wetbulb",
+                 "heatindex",
+                 "h_heatindex")
+
+# make dataframe
+data <- data.frame(matrix(ncol=23, nrow=0))
+colnames(data) <- index_names
+data <- mutate(data,
+               date = as.POSIXct(date),
+               site = as.factor(NA))
+
+filepaths <- list.files(filedir,
+                        full.names = T)
+
+append_file <- function(data,
+                        filepaths,
+                        index_names.=index_names){
+  if(length(filepaths) == 0) return(data) # stop condition of the recursion
+  station_number <- filepaths[1] %>% read_file() %>% str_extract("\\d") # get first number in file
+  filepaths[1] %>%
+    read_csv(col_names = index_names.,
+             col_types = cols(date = col_datetime(format = "%d/%m/%y %H:%M"),
+                              .default = col_double()),
+             skip = 6) %>%
+    mutate(site=as.factor(station_number)) %>%
+    bind_rows(data) %>%
+    append_file(filepaths[-1]) %>%
+    return()
+}
+
+data <- data %>% append_file(filepaths)
+
+summary(data)
+  
+timevar <- data %>%
+  timeVariation(pol = c("pm1","pm25","pm10"), type = "site")
+```
+
+# Variations in time
+
+## Diurnal variation
+```{r, echo=FALSE}
+plot(timevar, subset = "hour")
+```
+## Diurnal variation by weekday
+```{r, echo=FALSE, fig.height=10, fig.width=10}
+plot(timevar, subset = "day.hour")
+```
+## Weekly averages
+```{r, echo=FALSE}
+plot(timevar, subset = "day")
+```
+## Monthly averages
+```{r, echo=FALSE}
+plot(timevar, subset = "month")
+```
