@@ -1,15 +1,16 @@
 ---
-title: "Woking Network"
-output: html_notebook
+title: "Woking Greens Network"
+output: html_document
 ---
-
-# Woking Greens Network
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE, fig.show='hide'}
 # libraries
 
 library(tidyverse)
 library(openair)
+library(latticeExtra)
+library(splitr)
+library(lubridate)
 
 # set variables
 filedir <- "G:/My Drive/IC/Doutorado/Sandwich/Data/WokingNetwork/"
@@ -65,28 +66,247 @@ append_file <- function(data,
 }
 
 data <- data %>% append_file(filepaths)
-
-summary(data)
   
 timevar <- data %>%
   timeVariation(pol = c("pm1","pm25","pm10"), type = "site")
 ```
 
+# Summary
+
+The air quality monitors seems to be operating properly. There is a good concordance between each station.
+Station #7 shows a worse data coverage. It needs further investigation.
+The basic statistics, analysis in time and backwards trajectories are below.
+
+Woking seems to do not have intense pollution sources, besides the vehicular fleet.
+The diurnal variation presents higher levels of PM in the night (7 pm to 7 am) and in the weekends.
+
+The episodes of intense pollution are associated with air parcels coming from east, passing through London. The days without polluted episodes have parcels coming from west.
+
+# Data consistency
+
+```{r, echo=FALSE, fig.height=20, fig.width=5, warning = FALSE}
+summary(data)
+
+data %>%
+  summaryPlot(pol = c("aqi"),
+              period = "months")
+```
+
+
+# Daily mean
+
+```{r, echo=FALSE}
+for(sitenumber in 1:8) {
+  data %>%
+  filter(site == sitenumber) %>%
+  calendarPlot(pol = c("aqi"),
+               annotate = "value",
+               type = "site",
+               main = paste("AQI in Site", sitenumber))
+}
+
+```
+
+# Back trajectories
+
+```{r, echo = FALSE}
+
+trajectory_plot_custom <- function (x, show_hourly = TRUE, color_scheme = "cycle_hues") {
+  if (inherits(x, "trajectory_model")) {
+    if (!is.null(x$traj_df)) {
+      traj_df <- x$traj_df
+    }
+    else {
+      stop("There is no data available for plotting.")
+    }
+  }
+  if (inherits(x, "data.frame")) {
+    if (all(c("run", "receptor", "hour_along", "traj_dt", 
+      "lat", "lon", "height", "traj_dt_i") %in% colnames(x))) {
+      traj_df <- x
+    }
+    else {
+      stop("This tibble does not contain plottable trajectory data.")
+    }
+  }
+  dt_runs <- traj_df$traj_dt_i %>% unique() %>% length()
+  if (color_scheme == "cycle_hues") {
+    colors <- (scales::hue_pal(c = 90, l = 70))(dt_runs)
+  }
+  else if (color_scheme == "increasingly_gray") {
+    colors <- (scales::grey_pal(0.7, 0.1))(dt_runs)
+  }
+  # traj_df$lon[which(traj_df$lon > 0)] <- traj_df$lon[which(traj_df$lon > 
+  #   0)] - (180 * 2)
+  receptors <- traj_df %>% dplyr::pull(receptor) %>% unique()
+  dates <- traj_df %>% dplyr::pull(traj_dt_i) %>% unique()
+  traj_plot <- leaflet::leaflet() %>%
+    # leaflet::addProviderTiles(provider = "OpenStreetMap", 
+    # group = "OpenStreetMap") %>%
+    leaflet::addProviderTiles(provider = "CartoDB.DarkMatter", 
+    group = "CartoDB Dark Matter") %>%
+    # leaflet::addProviderTiles(provider = "CartoDB.Positron", 
+    # group = "CartoDB Positron") %>%
+    # leaflet::addProviderTiles(provider = "Esri.WorldTerrain", 
+    # group = "ESRI World Terrain") %>%
+    # leaflet::addProviderTiles(provider = "Stamen.Toner", 
+    # group = "Stamen Toner") %>%
+    leaflet::fitBounds(lng1 = min(traj_df[["lon"]]), 
+    lat1 = min(traj_df[["lat"]]), lng2 = max(traj_df[["lon"]]), 
+    lat2 = max(traj_df[["lat"]])) %>%
+    # leaflet::addLayersControl(baseGroups = c("CartoDB Positron", "CartoDB Dark Matter", "Stamen Toner", "ESRI World Terrain"), 
+    leaflet::addLayersControl(overlayGroups = c("trajectory_points", "trajectory_paths"), 
+    position = "topright")
+  for (i in seq_along(receptors)) {
+    receptor_i <- receptors[i]
+    for (j in seq_along(dates)) {
+      date_i <- dates[j]
+      wind_traj_ij <- traj_df %>% dplyr::filter(receptor == 
+        receptor_i, traj_dt_i == date_i)
+      popup <- paste0("<strong>trajectory</strong> ", 
+        wind_traj_ij[["traj_dt_i"]], "<br><strong>at time</strong> ", 
+        wind_traj_ij[["traj_dt"]], " (", wind_traj_ij[["hour_along"]], 
+        " h)<br><strong>height</strong> ", wind_traj_ij[["height"]], 
+        " <font size=\"1\">m AGL</font> / ", "<strong>P</strong> ", 
+        wind_traj_ij[["pressure"]], " <font size=\"1\">hPa</font>")
+      traj_plot <- traj_plot %>% leaflet::addPolylines(lng = wind_traj_ij[["lon"]], 
+        lat = wind_traj_ij[["lat"]], group = "trajectory_paths", 
+        weight = 2, smoothFactor = 1, color = colors[j]) %>% 
+        leaflet::addCircles(lng = wind_traj_ij[["lon"]], 
+          lat = wind_traj_ij[["lat"]], group = "trajectory_points", 
+          radius = 250, fill = TRUE, color = colors[j], 
+          fillColor = colors[j], popup = popup)
+    }
+  }
+  traj_plot
+}
+
+getMet <- function (dates, path_met = "G:/My Drive/IC/Doutorado/Sandwich/Data/TrajData/") {
+  
+  dates <- dates %>%
+    format(format = "%y-%b") %>%
+    unique()
+  
+  for (date in dates) {
+    for (week in 1:5) {
+      year <- str_split_fixed(date, "-", n = 2)[1]
+      month <- str_to_lower(str_split_fixed(date, "-", n = 2)[2])
+      try(download.file(url = paste0("ftp://arlftp.arlhq.noaa.gov/archives/gdas1/gdas1.",
+                                   month,
+                                   year,
+                                   ".w",
+                                   week),
+                      destfile = paste0(path_met,"gdas1.", month, year, ".w", week),
+                      mode = "wb")
+      )
+    }
+  }
+}
+
+#getMet(dates = data$date) #import gdas1 data from NOAA. Run weekly.
+
+```
+
+```{r, echo = FALSE}
+
+event_days <- data %>%
+  mutate(date = floor_date(date, "day")) %>%
+  group_by(date) %>%
+  summarise(mean_aqi = na.omit(mean(aqi))) %>%
+  slice_max(mean_aqi, n = 3) %>%
+  pull(date) %>%
+  strftime(format="%Y-%m-%d") %>%
+  unique() %>%
+  sort()
+
+normal_days <- data %>%
+  mutate(date = floor_date(date, "day")) %>%
+  group_by(date) %>%
+  summarise(mean_aqi = na.omit(mean(aqi))) %>%
+  slice_min(mean_aqi, n = 3) %>%
+  pull(date) %>%
+  strftime(format="%Y-%m-%d") %>%
+  unique() %>%
+  sort()
+
+events_trajectory <- list()
+n = 1
+for (day in event_days){
+  events_trajectory[[n]] <- 
+    hysplit_trajectory(
+      lat = 51.318282,
+      lon = -0.558610,
+      height = 50,
+      duration = 24,
+      days = day,
+      daily_hours = c(0, 6, 12, 18),
+      direction = "backward",
+      met_type = "gdas1",
+      extended_met = TRUE,
+      met_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/TrajData/",
+      exec_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/HysplitOutput/") 
+  n <- n + 1
+}
+
+normal_trajectory <- list()
+n = 1
+for (day in normal_days){
+  normal_trajectory[[n]] <- 
+    hysplit_trajectory(
+      lat = 51.318282,
+      lon = -0.558610,
+      height = 50,
+      duration = 24,
+      days = day,
+      daily_hours = c(0, 6, 12, 18),
+      direction = "backward",
+      met_type = "gdas1",
+      extended_met = TRUE,
+      met_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/TrajData/",
+      exec_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/HysplitOutput/") 
+  n <- n + 1
+}
+```
+
+## Days with wrost AQI
+
+```{r, echo = FALSE}
+events_trajectory[[1]] %>% trajectory_plot_custom()
+events_trajectory[[2]] %>% trajectory_plot_custom()
+events_trajectory[[3]] %>% trajectory_plot_custom()
+```
+
+## Days with best AQI
+
+```{r, echo = FALSE}
+normal_trajectory[[1]] %>% trajectory_plot_custom()
+normal_trajectory[[2]] %>% trajectory_plot_custom()
+normal_trajectory[[3]] %>% trajectory_plot_custom()
+```
+
 # Variations in time
 
 ## Diurnal variation
+
 ```{r, echo=FALSE}
 plot(timevar, subset = "hour")
 ```
+
 ## Diurnal variation by weekday
+
 ```{r, echo=FALSE, fig.height=10, fig.width=10}
 plot(timevar, subset = "day.hour")
 ```
+
 ## Weekly averages
+
 ```{r, echo=FALSE}
 plot(timevar, subset = "day")
 ```
+
 ## Monthly averages
+
 ```{r, echo=FALSE}
 plot(timevar, subset = "month")
 ```
+
