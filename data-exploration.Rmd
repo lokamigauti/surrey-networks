@@ -11,6 +11,7 @@ library(openair)
 library(latticeExtra)
 library(splitr)
 library(lubridate)
+library(gganimate)
 
 # set variables
 filedir <- "G:/My Drive/IC/Doutorado/Sandwich/Data/WokingNetwork/"
@@ -59,7 +60,7 @@ append_file <- function(data,
              col_types = cols(date = col_datetime(format = "%d/%m/%y %H:%M"),
                               .default = col_double()),
              skip = 6) %>%
-    mutate(site=as.factor(station_number)) %>%
+    mutate(site=as.factor(paste("Station",station_number))) %>%
     bind_rows(data) %>%
     append_file(filepaths[-1]) %>%
     return()
@@ -84,12 +85,60 @@ The episodes of intense pollution are associated with air parcels coming from ea
 
 # Data consistency
 
-```{r, echo=FALSE, fig.height=20, fig.width=5, warning = FALSE}
+```{r, echo=FALSE, fig.height=15, fig.width=10, warning = FALSE}
 summary(data)
 
 data %>%
+  filter(site %in% c("Station 1", "Station 2", "Station 3", "Station 4")) %>%
   summaryPlot(pol = c("aqi"),
               period = "months")
+data %>%
+  filter(site %in% c("Station 5", "Station 6", "Station 7", "Station 8")) %>%
+  summaryPlot(pol = c("aqi"),
+              period = "months")
+```
+
+# Correlations
+
+```{r, fig.height=10, fig.width=10}
+M <- data %>%
+  select(date, aqi, site) %>%
+  pivot_wider(names_from = site, values_from = aqi) %>%
+  na.omit() %>%
+  select(-date)
+M_p <- M %>%
+  corrplot::cor.mtest(conf.level = 0.95)
+M %>%
+  cor() %>%
+  corrplot::corrplot.mixed(upper = 'number',
+                           lower = 'shade',
+                           p.mat = M_p$p,
+                           insig = 'p-value')
+
+ani <- data %>%
+  select(date, aqi, site) %>%
+  pivot_wider(names_from = site, values_from = aqi) %>%
+  mutate(day = as.Date(date)) %>%
+  select(day, 'Station 1', 'Station 4') %>%
+  na.omit() %>%
+  ggplot(aes(x = .$'Station 1', y = .$'Station 4')) +
+  geom_abline(slope = 1, intercept = 0, alpha = 0.5, linetype = "dashed") +
+  geom_point(alpha = 0.1, size = 3) +
+  transition_time(day) +
+  ease_aes('cubic-in-out') +
+  enter_grow(size = 0) + 
+  exit_shrink(size = 0) +
+  labs(title = 'Day: {frame_time}', x = "Station 1", y = "Station 4") +
+  theme_minimal()
+
+ani %>%
+  animate(fps = 10,
+          duration = 30)
+
+anim_save(filename = "Station1xStation4.gif", path = "G:/My Drive/IC/Doutorado/Sandwich/Output/WokingNetwork/")
+
+
+
 ```
 
 
