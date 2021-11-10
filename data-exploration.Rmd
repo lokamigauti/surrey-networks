@@ -145,13 +145,13 @@ anim_save(filename = "Station1xStation4.gif", path = "G:/My Drive/IC/Doutorado/S
 # Daily mean
 
 ```{r, echo=FALSE}
-for(sitenumber in 1:8) {
+for(sitenumber in c("Station 1", "Station 2", "Station 3", "Station 4", "Station 5", "Station 6", "Station 7", "Station 8")) {
   data %>%
   filter(site == sitenumber) %>%
   calendarPlot(pol = c("aqi"),
                annotate = "value",
                type = "site",
-               main = paste("AQI in Site", sitenumber))
+               main = paste("AQI in ", sitenumber))
 }
 
 ```
@@ -294,6 +294,7 @@ for (day in event_days){
       extended_met = TRUE,
       met_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/TrajData/",
       exec_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/HysplitOutput/") 
+  saveRDS(events_trajectory[[n]], paste0("G:/My Drive/IC/Doutorado/Sandwich/Data/TrajProc/", "events_trajectory", n, "0.RData"))
   n <- n + 1
 }
 
@@ -313,8 +314,10 @@ for (day in normal_days){
       extended_met = TRUE,
       met_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/TrajData/",
       exec_dir = "G:/My Drive/IC/Doutorado/Sandwich/Data/HysplitOutput/") 
+  saveRDS(events_trajectory[[n]], paste0("G:/My Drive/IC/Doutorado/Sandwich/Data/TrajProc/", "normal_trajectory", n, "0.RData"))
   n <- n + 1
 }
+
 ```
 
 ## Days with wrost AQI
