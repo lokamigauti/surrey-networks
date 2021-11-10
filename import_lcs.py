@@ -7,7 +7,6 @@ from io import StringIO
 from copy import deepcopy
 from tools import size_in_memory
 
-# abacate
 
 import matplotlib.pyplot as plt # debug
 
