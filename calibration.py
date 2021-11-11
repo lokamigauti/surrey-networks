@@ -53,16 +53,30 @@ def test_ridge_poly(X_train, y_train, X_test, y_test, alpha, degree, plot=False)
 
     return coef, intercept
 
+def calibration_data_import(path):
+    station_names = []
+    for station_number in range(1, 9):
+        station_names.append(f'S{station_number}')
+
+    df = pd.read_csv(path, parse_dates=['time'], index_col='time')
+    df.columns = df.columns.str.split("_", expand=True)
+    df = df.rename(columns={'T':'Temp'})
+    df = df.stack(level=0).reset_index(level=1).rename(columns={"level_1": "station"})
+    df = df.set_index([df.index, 'station'])
+    ds = df.to_xarray()
+    ds.to_netcdf(DATA_DIR + 'Imported/calibration.nc')
+    da = ds.to_array()
+    return da
 
 if __name__ == '__main__':
-    df = pd.read_csv(DATA_DIR+LCS+'calibration.csv', parse_dates=['time'], index_col='time')
-    y = df['Ref_PM10'].to_numpy()
-    X = df[['S1_PM10', 'S1_Temp', 'S1_RH']].to_numpy()
+    path = DATA_DIR + LCS + 'calibration.csv'
+    da = calibration_data_import(path)
+    y = da.sel(station='Ref', variable='PM10').values.copy()
+    X = da.sel(station='S1', variable=['PM10', 'Temp', 'RH']).values.copy()
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.20, random_state=18462)
+    alpha = 30
+    degree = 3
 
-    coef, intercept = test_ridge_poly(X_train, y_train, X_test, y_test, 30, 3, plot=True) # manual test of hyperparameters
-    coef
-    intercept
+    # The hyperparameters determination was performed by eye because of the low number of samples
 
-
-
+    coef, intercept = test_ridge_poly(X_train, y_train, X_test, y_test, alpha, degree, plot=True)
