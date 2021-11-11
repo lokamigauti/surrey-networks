@@ -5,18 +5,13 @@ import glob
 import re
 from io import StringIO
 from copy import deepcopy
-from tools import size_in_memory
-
-
-import matplotlib.pyplot as plt # debug
+# import matplotlib.pyplot as plt # debug
 
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 
 ERA5 = 'ERA5/wind_2021.nc'
 
 LCS = 'WokingNetwork/'
-
-
 
 
 def make_da(filepaths):
@@ -41,13 +36,11 @@ def make_da(filepaths):
     return da_clear
 
 
-def convert_to_float_and_replace_nan(da, deep_copy=False):
+def convert_to_float_and_replace_nan(da, deep_copy=False, precision=32):
     if deep_copy:
-        da_copy = da.copy()
-    else:
-        da_copy = da
+        da = da.copy()
 
-    data_temp = da_copy.values.copy()
+    data_temp = da.values.copy()
 
     original_shape = deepcopy(data_temp.shape)
 
@@ -59,8 +52,10 @@ def convert_to_float_and_replace_nan(da, deep_copy=False):
         except ValueError:
             data_temp[idx] = np.nan
     data_temp = data_temp.reshape(original_shape)
-    da_copy = da_copy.copy(data=data_temp)
-    return da_copy
+    da = da.copy(data=data_temp)
+    da = da.astype(f'float{precision}')
+    da.to_netcdf(DATA_DIR + 'Imported/lcs.nc')
+    return da
 
 
 if __name__ == '__main__':
@@ -69,10 +64,7 @@ if __name__ == '__main__':
 
     da = make_da(filepaths)
 
-    da.isel(station_name=0).plot(y='variable')
-    plt.show()
+    # da.isel(station_name=0).plot(col='variable', hue='station_name', col_wrap=3)
+    # plt.show()
 
-    da.to_netcdf('G:/My Drive/IC/Doutorado/Sandwich/Output/WokingNetwork/' + 'lcs.nc')
-
-    da.sel(variable='temp').values
 

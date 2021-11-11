@@ -34,3 +34,6 @@ wind_mag.plot.contourf(levels=6, transform=ccrs.PlateCarree(), cmap='viridis')
 da_toplot.plot.quiver(x='longitude', y='latitude', u='u10', v='v10', ax=ax, transform=ccrs.PlateCarree())
 ax.coastlines()
 plt.show()
+
+da = xr.open_dataarray(DATA_DIR+'Imported/lcs.nc')
+da_norm =
