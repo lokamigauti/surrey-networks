@@ -21,7 +21,7 @@ def test_ridge(X_train, y_train, X_test, y_test, alpha, plot=False):
     coef = reg.coef_
     intercept = reg.intercept_
 
-    if explore:
+    if plot:
         fig, ax = plt.subplots()
         ax.plot(y_train, X_train[:,1], '.', label='sensor')
         ax.plot(y_train, reg.predict(X_train_scaled), '.', label='calibration')
@@ -66,6 +66,7 @@ def calibration_data_import(path):
     ds = df.to_xarray()
     ds.to_netcdf(DATA_DIR + 'Imported/calibration.nc')
     da = ds.to_array()
+    da = da.transpose('time', 'station', 'variable')
     return da
 
 if __name__ == '__main__':
