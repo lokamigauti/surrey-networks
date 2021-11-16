@@ -19,7 +19,7 @@ def make_da(filepaths):
     for filepath in filepaths:
         file_raw = open(filepath, 'r').read()
         pattern = re.compile('[^"]+')
-        station_name = pattern.search(file_raw[:file_raw.index("\n")]).group()
+        station = pattern.search(file_raw[:file_raw.index("\n")]).group()
         df = pd.read_csv(StringIO(file_raw),
                          skiprows=6,
                          names=['time', 'aqi', 'h_aqi', 'pm1', 'h_pm1', 'pm25', 'h_pm25', 'pm10', 'h_pm10', 'temp',
@@ -28,11 +28,12 @@ def make_da(filepaths):
                          parse_dates=['time'],
                          index_col='time')
         da = df.to_xarray().to_array()
-        da['station_name'] = station_name
-        da = da.expand_dims(dim='station_name')
+        da['station'] = station
+        da = da.expand_dims(dim='station')
         da_list.append(da)
-    da = xr.concat(da_list, dim='station_name')
+    da = xr.concat(da_list, dim='station')
     da_clear = convert_to_float_and_replace_nan(da, deep_copy=True)
+    da_clear.to_netcdf(DATA_DIR + 'Imported/lcs.nc')
     return da_clear
 
 
@@ -54,7 +55,6 @@ def convert_to_float_and_replace_nan(da, deep_copy=False, precision=32):
     data_temp = data_temp.reshape(original_shape)
     da = da.copy(data=data_temp)
     da = da.astype(f'float{precision}')
-    da.to_netcdf(DATA_DIR + 'Imported/lcs.nc')
     return da
 
 
