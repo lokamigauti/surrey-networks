@@ -6,7 +6,9 @@ from sklearn import linear_model
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+import json
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
+OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
 LCS = 'WokingNetwork/'
 
 
@@ -61,7 +63,12 @@ def calibration_data_import(path):
 
     df = pd.read_csv(path, parse_dates=['time'], index_col='time')
     df.columns = df.columns.str.split("_", expand=True)
-    df = df.rename(columns={'T':'Temp'})
+    df = df.rename(columns={'T': 'temp',
+                            'Temp': 'temp',
+                            'RH': 'rh',
+                            'PM10': 'pm10',
+                            'PM2.5': 'pm25',
+                            'PM1': 'pm1'})
     df = df.stack(level=0).reset_index(level=1).rename(columns={"level_1": "station"})
     df = df.set_index([df.index, 'station'])
     ds = df.to_xarray()
@@ -103,22 +110,53 @@ def ds_regression(X, y, model_dims=['station'], **regression_kwargs):
     return params_dict
 
 
-def calibrate(station_output, params):
+def calibrate(station_outputs, params):
+    if station_outputs.ndim == 1:
+        y = np.zeros(1)
+        station_outputs_length = 1
+    else:
+        y = np.zeros(len(station_outputs[:, 0]))
+        station_outputs_length = len(station_outputs)
     poly_features = PolynomialFeatures(degree=params['poly_degree'], include_bias=False)
-    station_output_poly = poly_features.fit_transform(station_output)
-    station_output_poly_normalised = (station_output_poly - params['mean'])/params['std']
-    polys = station_output_poly_normalised * params['coef']
-    y = params['intercept'] + polys.sum(axis=1)
+    for n in range(0, station_outputs_length):
+        if np.any(np.isnan(station_outputs[n])):
+            y[n] = np.nan
+        else:
+            if station_outputs_length == 1:
+                station_output = np.array([station_outputs, np.zeros(station_outputs.shape)])
+            else:
+                station_output = np.array([station_outputs[n], np.zeros(station_outputs[n].shape)])
+            station_output_poly = poly_features.fit_transform(station_output)[0]
+            station_output_poly_normalised = (station_output_poly - params['mean'])/params['std']
+            polys = station_output_poly_normalised * params['coef']
+            y[n] = params['intercept'] + polys.sum()
     return y
 
+def convert(x):
+    if hasattr(x, "tolist"):  # numpy arrays have this
+        return {"$array": x.tolist()}  # Make a tagged object
+    raise TypeError(x)
+
+
+def deconvert(x):
+    if len(x) == 1:  # Might be a tagged object...
+        key, value = next(iter(x.items()))  # Grab the tag and value
+        if key == "$array":  # If the tag is correct,
+            return np.array(value)  # cast back to array
+    return x
+
+def open_calibration_data(path):
+    with open(path, 'r') as fp:
+        calibration_params = json.load(fp, object_hook=deconvert)
+    return calibration_params
 
 if __name__ == '__main__':
-    path = DATA_DIR + LCS + 'calibration.csv'
+    path = DATA_DIR + LCS + 'calibration_std.csv'
     da = calibration_data_import(path)
 
     # The hyperparameters determination was performed by eye because of the low number of samples
     # y = da.sel(station='Ref', variable='PM10').values.copy()
-    # X = da.sel(station='S1', variable=['PM10', 'RH', 'Temp']).values.copy()
+    # X = da.sel(station='S1', variable=['PM10', 'RH', 'temp']).values.copy()
     # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.20, random_state=18462)
     # alpha = 30
     # degree = 3
@@ -127,16 +165,22 @@ if __name__ == '__main__':
 
     alpha = 30
     degree = 3
-    targets = ['PM10', 'PM2.5', 'PM1']
+    targets = ['pm10', 'pm25', 'pm1']
     regression_params = {}
     for target in targets:
         y = da.sel(station='Ref', variable=target)
-        X = da.drop_sel(station='Ref').sel(variable=[target, 'RH', 'Temp'])
+        X = da.drop_sel(station='Ref').sel(variable=[target, 'rh', 'temp'])
         regression_params[target] = ds_regression(X, y, degree=degree, alpha=alpha)
 
+    # regression_params_list = {a: b: c.tolist() for a, b, c in regression_params.items()}
+    with open(OUTPUT_DIR + LCS + 'calibration_parameters.json', 'w') as fp:
+        json.dump(regression_params, fp, default=convert)
+    with open(OUTPUT_DIR + LCS + 'calibration_parameters.json', 'r') as fp:
+        calibration_params = json.load(fp, object_hook=deconvert)
 
-    X = da.sel(station='S5', variable=['PM1', 'RH', 'Temp']).values.copy()
-    X_cal = calibrate(X, regression_params['PM1']['S5']).copy()
+
+    X = da.sel(station='WokingGreens#5', variable=['pm1', 'rh', 'temp']).values.copy()
+    X_cal = calibrate(X, regression_params['pm1']['WokingGreens#5']).copy()
 
 
     fig, ax = plt.subplots()
@@ -151,4 +195,5 @@ if __name__ == '__main__':
 
 
 
-    da.sel(station='S1')['PM10_cal'] = calibrate(X, regression_params['PM10']['S1']).copy()
+    da.sel(station='WokingGreens#1')['pm10_cal'] = calibrate(X, regression_params['pm10']['WokingGreens#1']).copy()
+
