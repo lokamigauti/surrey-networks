@@ -5,7 +5,6 @@ import glob
 import re
 from io import StringIO
 from copy import deepcopy
-# import matplotlib.pyplot as plt # debug
 
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 
@@ -63,8 +62,4 @@ if __name__ == '__main__':
     filepaths = glob.glob(DATA_DIR + LCS + 'WokingGreens*')
 
     da = make_da(filepaths)
-
-    # da.isel(station_name=0).plot(col='variable', hue='station_name', col_wrap=3)
-    # plt.show()
-
 
