@@ -2,7 +2,7 @@
 
 # License
 
-Woking Calibration Tool © 2021 by Leonardo Yoshiaki Kamigauti is licensed under a
+Surrey Networks Code Repository © 2021 by Leonardo Yoshiaki Kamigauti is licensed under a
 [Creative Commons Attribution-ShareAlike 4.0 International License][cc-by-sa].
 
 [![CC BY-SA 4.0][cc-by-sa-image]][cc-by-sa]
