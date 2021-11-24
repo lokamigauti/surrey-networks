@@ -51,5 +51,17 @@ if __name__ == '__main__':
     # for pm in ['pm10', 'pm25', 'pm1']:
     #     cal = da_calibrated.groupby('station').map(calibrator, args=(pm, calibration_params)).copy().rename('case')
     #     da_calibrated = xr.concat([da_calibrated, cal], dim='variable')
-    da_calibrated = make_calibration(da, calibration_params, save=True)
-    da_calibrated #TODO: create an line to open the calibrated netcdf
+    # da_calibrated = make_calibration(da, calibration_params, save=True)
+    da_calibrated = xr.open_dataarray(OUTPUT_DIR + LCS + 'pm_calibrated.nc')
+    mean_pm_per_station = da_calibrated.stack(station_pm=('station', 'variable')).groupby('station_pm').mean('time')
+    mean_pm = mean_pm_per_station.unstack().mean('station')
+    mean_pm.sel(variable='pm10_cal')
+    mean_pm.sel(variable='pm25_cal')
+    mean_pm.sel(variable='pm1_cal')
+
+    da_pm = da.sel(variable=['pm10', 'pm25', 'pm1'])
+    mean_pm_per_station_uncal = da_pm.stack(station_pm=('station', 'variable')).groupby('station_pm').mean('time')
+    mean_pm_uncal = mean_pm_per_station_uncal.unstack().mean('station')
+    mean_pm_uncal.sel(variable='pm10')
+    mean_pm_uncal.sel(variable='pm25')
+    mean_pm_uncal.sel(variable='pm1')
