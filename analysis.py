@@ -41,34 +41,15 @@ LCS = 'WokingNetwork/'
 # plt.show()
 
 
-def calibrator(data, target, calibration_params):
-    X = data.sel(variable=[target, 'rh', 'temp']).values.copy()
-    if data.station.values.shape == ():
-        station_ = data.station.values.tolist()
-        y = calibration.calibrate(X.transpose(), calibration_params[target][station_]).copy()
-    else:
-        station_ = data.station.values[0]
-        y = calibration.calibrate(X[0].transpose(), calibration_params[target][station_]).copy()
-    da = xr.DataArray(
-        y.reshape(-1, 1),
-        coords=[('time', data.time.values.copy()), ('variable', [target+'_cal'])])
-    da = da.astype('float32')
-    return da
-
-
 if __name__ == '__main__':
-    # calibration plots
 
     da = xr.open_dataarray(DATA_DIR + 'Imported/lcs.nc')
-    calibration_params = calibration.open_calibration_data(OUTPUT_DIR + LCS + 'calibration_parameters.json')
-    # target = 'pm10'
-    # station = 'WokingGreens#5'
-    # X = da.sel(station=station, variable=[target, 'rh', 'temp']).values.copy()
-    # X_cal = calibration.calibrate(X.transpose(), calibration_params[target][station]).copy()
-    # calibration.calibrate(X.transpose()[0], calibration_params[target][station])
-    da_calibrated = da.copy().rename('calibrated')
-    for pm in ['pm10', 'pm25', 'pm1']:
-        cal = da_calibrated.groupby('station').map(calibrator, args=(pm, calibration_params)).copy().rename('case')
-        da_calibrated = xr.concat([da_calibrated, cal], dim='variable')
+    calibration_params = calibration.import_json_as_dict(OUTPUT_DIR + LCS + 'calibration_parameters.json')
 
-    da_calibrated.
+    #
+    # da_calibrated = da.copy().rename('calibrated')
+    # for pm in ['pm10', 'pm25', 'pm1']:
+    #     cal = da_calibrated.groupby('station').map(calibrator, args=(pm, calibration_params)).copy().rename('case')
+    #     da_calibrated = xr.concat([da_calibrated, cal], dim='variable')
+    da_calibrated = make_calibration(da, calibration_params, save=True)
+    da_calibrated #TODO: create an line to open the calibrated netcdf
