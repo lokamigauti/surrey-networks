@@ -114,7 +114,7 @@ def get_ridge_parameters(alpha, degree, targets, save=False):
     for target in targets:
         y = da.sel(station='Ref', variable=target)
         X = da.drop_sel(station='Ref').sel(variable=[target, 'rh', 'temp'])
-        regression_params[target] = apply_model_on_dimensions(X, y, degree=degree, alpha=alpha)
+        regression_params[target] = apply_model_on_dimensions(X, y, degree=degree[target], alpha=alpha[target])
 
     if save:
         with open(OUTPUT_DIR + LCS + 'calibration_parameters.json', 'w') as fp:
@@ -166,7 +166,7 @@ def json2dict(x):
 def calibrator(data, target, calibration_params):
     X = data.sel(variable=[target, 'rh', 'temp']).values.copy()
     station_ = data.station.values[0]
-    y = calibration.calibrate(X.reshape(X.shape[1:3]).transpose(), calibration_params[target][station_]).copy()
+    y = calibrate(X.reshape(X.shape[1:3]).transpose(), calibration_params[target][station_]).copy()
     da = xr.DataArray(
         y.reshape(-1, 1),
         coords=[('time', data.time.values.copy()), ('variable', [target+'_cal'])])
@@ -194,8 +194,8 @@ def import_json_as_dict(path):
 
 
 if __name__ == '__main__':
-    find_hyperparameters = False
-    calibrate_stations = False
+    find_hyperparameters = True
+    calibrate_stations = True
 
     # load data
     calibration_data_path = DATA_DIR + LCS + 'calibration_std.csv'
@@ -211,18 +211,22 @@ if __name__ == '__main__':
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
-        y = da.sel(station='Ref', variable='PM10').values.copy()
-        X = da.sel(station='S1', variable=['PM10', 'RH', 'temp']).values.copy()
+        y = da.sel(station='Ref', variable='pm10').values.copy()
+        X = da.sel(station='WokingGreens#1', variable=['pm10', 'rh', 'temp']).values.copy()
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.20, random_state=18462)
-        alpha = 30
+        alpha = 10
         degree = 3
         coef, intercept = test_ridge_poly(X_train, y_train, X_test, y_test, alpha, degree, plot=True)
         coef, intercept = test_ridge_poly(X, y, X, y, alpha, degree, plot=True)
 
     if calibrate_stations:
         # make parameters json
-        alpha = 30
-        degree = 3
+        alpha = {'pm10': 30,
+                 'pm25': 10,
+                 'pm1': 10}
+        degree = {'pm10': 3,
+                 'pm25': 3,
+                 'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
         calibration_params = get_ridge_parameters(alpha, degree, targets, save=True)
         pm_calibrated = make_calibration(data, calibration_params, save=True)
