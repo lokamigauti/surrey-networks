@@ -65,3 +65,9 @@ if __name__ == '__main__':
     mean_pm_uncal.sel(variable='pm10')
     mean_pm_uncal.sel(variable='pm25')
     mean_pm_uncal.sel(variable='pm1')
+
+    median_pm_per_station = da_calibrated.stack(station_pm=('station', 'variable')).groupby('station_pm').median('time')
+    median_pm = median_pm_per_station.unstack().median('station')
+    median_pm.sel(variable='pm10_cal')
+    median_pm.sel(variable='pm25_cal')
+    median_pm.sel(variable='pm1_cal')

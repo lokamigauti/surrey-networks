@@ -56,6 +56,7 @@ def test_ridge_poly(X_train, y_train, X_test, y_test, alpha, degree, plot=False)
 
     return coef, intercept
 
+
 def calibration_data_import(path):
     station_names = []
     for station_number in range(1, 9):
@@ -77,6 +78,7 @@ def calibration_data_import(path):
     da = da.transpose('time', 'station', 'variable')
     return da
 
+
 def apply_poly_ridge(X, y, degree, alpha):
     poly_features = PolynomialFeatures(degree=degree, include_bias=False)
     X_poly = poly_features.fit_transform(X)
@@ -94,6 +96,7 @@ def apply_poly_ridge(X, y, degree, alpha):
 
     return return_dict
 
+
 def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs):
     X = X.copy()
     y = y.copy()
@@ -108,6 +111,7 @@ def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs)
         params_dict[dict_key] = apply_poly_ridge(X.sel(model_dim=dict_key), y, **regression_kwargs)
 
     return params_dict
+
 
 def get_ridge_parameters(alpha, degree, targets, save=False):
     regression_params = {}
@@ -148,6 +152,7 @@ def calibrate(station_outputs, params):
             polys = station_output_poly_normalised * params['coef']
             y[n] = params['intercept'] + polys.sum()
     return y
+
 
 def dict2json(x):
     if hasattr(x, "tolist"):  # numpy arrays have this
@@ -194,8 +199,9 @@ def import_json_as_dict(path):
 
 
 if __name__ == '__main__':
-    find_hyperparameters = True
+    find_hyperparameters = False
     calibrate_stations = True
+    plotting = False
 
     # load data
     calibration_data_path = DATA_DIR + LCS + 'calibration_std.csv'
@@ -211,10 +217,10 @@ if __name__ == '__main__':
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
-        y = da.sel(station='Ref', variable='pm10').values.copy()
-        X = da.sel(station='WokingGreens#1', variable=['pm10', 'rh', 'temp']).values.copy()
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.20, random_state=18462)
-        alpha = 10
+        y = da.sel(station='Ref', variable='pm1').values.copy()
+        X = da.sel(station='WokingGreens#3', variable=['pm1', 'rh', 'temp']).values.copy()
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.20, random_state=13462)
+        alpha = 5
         degree = 3
         coef, intercept = test_ridge_poly(X_train, y_train, X_test, y_test, alpha, degree, plot=True)
         coef, intercept = test_ridge_poly(X, y, X, y, alpha, degree, plot=True)
@@ -223,7 +229,7 @@ if __name__ == '__main__':
         # make parameters json
         alpha = {'pm10': 30,
                  'pm25': 10,
-                 'pm1': 10}
+                 'pm1': 5}
         degree = {'pm10': 3,
                  'pm25': 3,
                  'pm1': 3}
@@ -231,23 +237,19 @@ if __name__ == '__main__':
         calibration_params = get_ridge_parameters(alpha, degree, targets, save=True)
         pm_calibrated = make_calibration(data, calibration_params, save=True)
 
+    if plotting:
+        # Plots
+        X = da.sel(station='WokingGreens#5', variable=['pm1', 'rh', 'temp']).values.copy()
+        X_cal = calibrate(X, regression_params['pm1']['WokingGreens#5']).copy()
 
-    # Plots
-    X = da.sel(station='WokingGreens#5', variable=['pm1', 'rh', 'temp']).values.copy()
-    X_cal = calibrate(X, regression_params['pm1']['WokingGreens#5']).copy()
+        fig, ax = plt.subplots()
+        ax.plot(y, X[:, 0], '.', label='sensor')
+        ax.plot(y, X_cal, '.', label='calibration')
+        x_vals = np.array(ax.get_xlim())
+        y_vals = x_vals
+        ax.plot(x_vals, y_vals, '--')
+        ax.set_title(f'train{alpha}')
+        ax.legend(loc='upper left')
+        plt.show()
 
-
-    fig, ax = plt.subplots()
-    ax.plot(y, X[:, 0], '.', label='sensor')
-    ax.plot(y, X_cal, '.', label='calibration')
-    x_vals = np.array(ax.get_xlim())
-    y_vals = x_vals
-    ax.plot(x_vals, y_vals, '--')
-    ax.set_title(f'train{alpha}')
-    ax.legend(loc='upper left')
-    plt.show()
-
-
-
-    da.sel(station='WokingGreens#1')['pm10_cal'] = calibrate(X, regression_params['pm10']['WokingGreens#1']).copy()
-
+        da.sel(station='WokingGreens#1')['pm10_cal'] = calibrate(X, regression_params['pm10']['WokingGreens#1']).copy()
