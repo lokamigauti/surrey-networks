@@ -68,7 +68,7 @@ if __name__ == '__main__':
     mean_pm.sel(variable='pm1_cal')
 
     std_pm_per_station = pm.stack(station_pm=('station', 'variable')).groupby('station_pm').std('time')
-    std_pm = median_pm_per_station.unstack().mean('station')
+    std_pm = std_pm_per_station.unstack().mean('station')
     std_pm.sel(variable='pm10_cal')
     std_pm.sel(variable='pm25_cal')
     std_pm.sel(variable='pm1_cal')
@@ -97,9 +97,10 @@ if __name__ == '__main__':
 
     for n_high, pm_times in higher_days.items():
         for pm_size in pm_times:
-            title = f'{n_high} max of {pm_size}'
+            title = f'{n_high} max of {pm_size}, day {pm_times[pm_size]}'
             plot_era5_wind(era5, pm_times[pm_size], title)
 
+    # plot test
 
     da_toplot = era5.sel(time='2021-08-03T00:00:00.000000000')\
         .sortby('longitude').sel(longitude=slice(-2.4, 2)).sortby('latitude').sel(latitude=slice(50, 52))
@@ -116,3 +117,27 @@ if __name__ == '__main__':
     plt.title('abc')
     plt.show()
 
+    # mean wind
+
+    era5_mean = era5.sortby('time').sel(time=slice(pm.time.min(), pm.time.max())).mean(dim='time')
+    da_toplot = era5_mean\
+        .sortby('longitude').sel(longitude=slice(-2.4, 2)).sortby('latitude').sel(latitude=slice(50, 52))
+    da_toplot = da_toplot.assign(wind_mag=(da_toplot['u10'] ** 2 + da_toplot['v10'] ** 2) ** .5)
+    wind_mag = (da_toplot['u10'] ** 2 + da_toplot['v10'] ** 2) ** .5
+
+    ax = plt.subplot(projection=ccrs.Orthographic(-0.554106, 51.318604))
+    #ax.set_style('dark_background')
+    wind_mag.plot.contourf(levels=30, transform=ccrs.PlateCarree(), cmap='viridis', ax=ax,
+                           cbar_kwargs={'label': 'Wind speed (m/s)'})
+    p = da_toplot.plot.quiver(
+        x='longitude', y='latitude',
+        u='u10', v='v10',
+        color='w',
+        subplot_kws=dict(projection=ccrs.Orthographic(-0.554106, 51.318604),
+                         facecolor="gray"),
+        transform=ccrs.PlateCarree(),
+    )
+    p.axes.coastlines(color='w')
+    plt.title('Mean wind')
+    plt.savefig(OUTPUT_DIR + LCS + 'mean_wind.png')
+    plt.show()
