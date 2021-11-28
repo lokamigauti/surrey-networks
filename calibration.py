@@ -279,6 +279,27 @@ if __name__ == '__main__':
         pm_calibrated_path = OUTPUT_DIR + LCS + 'pm_calibrated.nc'
         pm_calibrated = xr.open_dataarray(pm_calibrated_path)
 
+    r_pearson = xr.corr(da.sel(station='Ref'), da, dim='time')
+    sns.heatmap(r_pearson.transpose().to_pandas()
+                , annot=True
+                , cmap='viridis'
+                , linewidths=2
+                , linecolor='white'
+                ).set_title('Pearson\'s r')
+    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr.png')
+    plt.show()
+
+    r2_pearson = r_pearson ** 2
+    sns.heatmap(r2_pearson.transpose().to_pandas()
+                , annot=True
+                , cmap='viridis'
+                , linewidths=2
+                , linecolor='white'
+                ).set_title('Pearson\'s r²')
+    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr2.png')
+    plt.show()
+
+
     r2_precal = LeoMetrics('r2').apply(da, da.sel(station='Ref').drop('station'))
     sns.heatmap(r2_precal.to_pandas()
                 , annot=True
@@ -286,6 +307,7 @@ if __name__ == '__main__':
                 , linewidths=2
                 , linecolor='white'
                 ).set_title('R²')
+    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_r2.png')
     plt.show()
 
     mse_precal = LeoMetrics('mse').apply(da, da.sel(station='Ref').drop('station')) ** 0.5
@@ -295,6 +317,7 @@ if __name__ == '__main__':
                 , linewidths=2
                 , linecolor='white'
                 ).set_title('Root-mean-square error')
+    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_rmse.png')
     plt.show()
 
     mape_precal = LeoMetrics('mape').apply(da, da.sel(station='Ref').drop('station'))
@@ -304,6 +327,7 @@ if __name__ == '__main__':
                 , linewidths=2
                 , linecolor='white'
                 ).set_title('Mean absolute percentage error')
+    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_mape.png')
     plt.show()
 
     if characterise_pre_cal:
