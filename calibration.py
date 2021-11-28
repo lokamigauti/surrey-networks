@@ -6,7 +6,10 @@ from sklearn import linear_model
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_percentage_error
 import matplotlib.pyplot as plt
+import seaborn as sns
 import json
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
@@ -15,7 +18,9 @@ LCS = 'WokingNetwork/'
 
 class LeoMetrics:
     metrics_dict = {
-        'r2': r2_score
+        'r2': r2_score,
+        'mse': mean_squared_error,
+        'mape': mean_absolute_percentage_error
     }
     def __init__(self, metric, sampledim='time'):
         assert metric in self.metrics_dict.keys(), "Metric not founded"
@@ -30,21 +35,34 @@ class LeoMetrics:
         :param y: ND DataArray
         :return: ND-1 array with the required metric (sample dimension will be su´´ressed)
         """
-        assert X.dims == y.dims, "X and y dims must be equal"
-        assert X.shape == y.shape, "X and y shapes must be equal"
-
         if copy:
             X = X.copy()
             y = y.copy()
+
+        from copy import deepcopy
+        assert len(X.shape) == len(y.shape) + 1, "Adadds"
+        x_feature_dims = list(deepcopy(X.dims))
+        x_extra_dim = [d for d in x_feature_dims if d not in y.dims][0]
+        y_expanded = []
+        for extra_coord in X[x_extra_dim]:
+            y_expanded.append(
+                y.copy()
+            )
+        y_expanded = xr.concat(y_expanded, dim=X[x_extra_dim])
+
+
         X_p = self.preprocess(X)
-        y_p = self.preprocess(y)
+        y_p = self.preprocess(y_expanded)
 
-
+        f = self.metrics_dict[self.metric]
+        da_metric = X_p.isel({self.sampledim: 0}).drop(self.sampledim)\
+            .copy(data=f(y_p.values, X_p.values, multioutput='raw_values'))
+        return da_metric.unstack()
 
     def preprocess(self, da):
-        stacked_features_list = list(da.dimensions)
+        stacked_features_list = list(da.dims)
         stacked_features_list.remove(self.sampledim)
-        da = da.stack(stacked_features=stacked_features_list).transpose(self.sampledim)
+        da = da.stack(stacked_features=stacked_features_list).transpose(self.sampledim, ...)
         return da
 
 
@@ -261,7 +279,32 @@ if __name__ == '__main__':
         pm_calibrated_path = OUTPUT_DIR + LCS + 'pm_calibrated.nc'
         pm_calibrated = xr.open_dataarray(pm_calibrated_path)
 
-    LeoMetrics('r2').apply(da, da.sel(station='Ref'))
+    r2_precal = LeoMetrics('r2').apply(da, da.sel(station='Ref').drop('station'))
+    sns.heatmap(r2_precal.to_pandas()
+                , annot=True
+                , cmap='viridis'
+                , linewidths=2
+                , linecolor='white'
+                ).set_title('R²')
+    plt.show()
+
+    mse_precal = LeoMetrics('mse').apply(da, da.sel(station='Ref').drop('station')) ** 0.5
+    sns.heatmap(mse_precal.to_pandas()
+                , annot=True
+                , cmap='viridis'
+                , linewidths=2
+                , linecolor='white'
+                ).set_title('Root-mean-square error')
+    plt.show()
+
+    mape_precal = LeoMetrics('mape').apply(da, da.sel(station='Ref').drop('station'))
+    sns.heatmap(mape_precal.to_pandas()
+                , annot=True
+                , cmap='viridis'
+                , linewidths=2
+                , linecolor='white'
+                ).set_title('Mean absolute percentage error')
+    plt.show()
 
     if characterise_pre_cal:
         da_by_station = list(da.groupby('station'))
@@ -270,9 +313,9 @@ if __name__ == '__main__':
         ref_dict = {ref_list[i][0]: ref_list[i][1] for i in range(0, len(ref_list))}
         da_stack = list(da.stack(station_variable=['station', 'variable']).groupby('station_variable'))
         r2 = xr.zeroeslike(da.isel(time=0).drop('time'))
-        for stat_var, stat_var_array in da_stack:
-            station, variable = stat_var
-            r2[] = r2_score(ref_dict[variable], stat_var_array)
+        # for stat_var, stat_var_array in da_stack:
+        #     station, variable = stat_var
+        #     r2[] = r2_score(ref_dict[variable], stat_var_array)
 
 
 
