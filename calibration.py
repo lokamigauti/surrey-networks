@@ -5,11 +5,47 @@ from sklearn.model_selection import train_test_split
 from sklearn import linear_model
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
 import json
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
 LCS = 'WokingNetwork/'
+
+
+class LeoMetrics:
+    metrics_dict = {
+        'r2': r2_score
+    }
+    def __init__(self, metric, sampledim='time'):
+        assert metric in self.metrics_dict.keys(), "Metric not founded"
+        self.metric = metric
+        self.sampledim = sampledim
+
+    def apply(self, X, y, copy=True):
+        """
+
+        :param copy:
+        :param X: ND DataArray
+        :param y: ND DataArray
+        :return: ND-1 array with the required metric (sample dimension will be su´´ressed)
+        """
+        assert X.dims == y.dims, "X and y dims must be equal"
+        assert X.shape == y.shape, "X and y shapes must be equal"
+
+        if copy:
+            X = X.copy()
+            y = y.copy()
+        X_p = self.preprocess(X)
+        y_p = self.preprocess(y)
+
+
+
+    def preprocess(self, da):
+        stacked_features_list = list(da.dimensions)
+        stacked_features_list.remove(self.sampledim)
+        da = da.stack(stacked_features=stacked_features_list).transpose(self.sampledim)
+        return da
 
 
 def test_ridge(X_train, y_train, X_test, y_test, alpha, plot=False):
@@ -98,6 +134,14 @@ def apply_poly_ridge(X, y, degree, alpha):
 
 
 def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs):
+    """
+
+    :param X:
+    :param y:
+    :param model_dims:
+    :param regression_kwargs:
+    :return:
+    """
     X = X.copy()
     y = y.copy()
 
@@ -111,6 +155,7 @@ def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs)
         params_dict[dict_key] = apply_poly_ridge(X.sel(model_dim=dict_key), y, **regression_kwargs)
 
     return params_dict
+
 
 
 def get_ridge_parameters(alpha, degree, targets, save=False):
@@ -199,8 +244,9 @@ def import_json_as_dict(path):
 
 
 if __name__ == '__main__':
+    characterise_pre_cal = True
     find_hyperparameters = False
-    calibrate_stations = True
+    calibrate_stations = False
     plotting = False
 
     # load data
@@ -214,6 +260,21 @@ if __name__ == '__main__':
         calibration_params = import_json_as_dict(ridge_parameters_path)
         pm_calibrated_path = OUTPUT_DIR + LCS + 'pm_calibrated.nc'
         pm_calibrated = xr.open_dataarray(pm_calibrated_path)
+
+    LeoMetrics('r2').apply(da, da.sel(station='Ref'))
+
+    if characterise_pre_cal:
+        da_by_station = list(da.groupby('station'))
+        ref = da_by_station[0][1]
+        ref_list = list(ref.groupby('variable'))
+        ref_dict = {ref_list[i][0]: ref_list[i][1] for i in range(0, len(ref_list))}
+        da_stack = list(da.stack(station_variable=['station', 'variable']).groupby('station_variable'))
+        r2 = xr.zeroeslike(da.isel(time=0).drop('time'))
+        for stat_var, stat_var_array in da_stack:
+            station, variable = stat_var
+            r2[] = r2_score(ref_dict[variable], stat_var_array)
+
+
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
