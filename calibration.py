@@ -8,10 +8,15 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_percentage_error
+from scipy import signal
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 import seaborn as sns
 import json
+import holoviews as hv
+from holoviews import opts
+hv.extension('bokeh')
+from bokeh.plotting import show
 
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
@@ -262,6 +267,34 @@ def import_json_as_dict(path):
     return dt
 
 
+def cross_corr(da, station, reference, variable, dt, mode='full', method='auto', plot=False):
+    ref_var = da.sel(station=reference, variable=variable).copy()
+    station_var = da.sel(station=station, variable=variable).copy()
+
+    corr = signal.correlate(ref_var, station_var, mode=mode, method=method)
+    lags = signal.correlation_lags(len(ref_var), len(station_var))
+    lag = lags[corr.argmax()] * dt
+
+    if plot:
+        fig, (ax_ref, ax_station, ax_corr) = plt.subplots(3, 1, figsize=(4.8, 4.8))
+        ax_ref.plot(ref_var)
+        ax_ref.set_title('Reference')
+        ax_ref.set_xlabel('Sample Number')
+        ax_station.plot(station_var)
+        ax_station.set_title('Station')
+        ax_station.set_xlabel('Sample Number')
+        ax_corr.plot(lags, corr)
+        ax_corr.set_title('Cross-correlated signal')
+        ax_corr.set_xlabel('Lag')
+        ax_ref.margins(0, 0.1)
+        ax_station.margins(0, 0.1)
+        ax_corr.margins(0, 0.1)
+        fig.tight_layout()
+        plt.show()
+
+    return lag
+
+
 if __name__ == '__main__':
     characterise_pre_cal = True
     find_hyperparameters = False
@@ -307,6 +340,28 @@ if __name__ == '__main__':
         plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_timeseries.png')
         plt.show()
 
+        from holoviews.operation import gridmatrix
+
+
+        hv_ds = hv.Dataset(da.to_dataset(dim='station'))
+        hv_ds.to(hv.Image, kdims=["time", "station"], dynamic=False)
+        show(hv.render(scatter))
+        group = hv_ds.groupby('variable', container_type=hv.NdOverlay)
+        grid = gridmatrix(group, diagonal_type=hv.Scatter)
+
+        img = hv.Image((range(3), range(5), np.random.rand(5, 3)), datatype=['grid'])
+        img
+        show(hv.render(img))
+
+        da.plot(x='station',
+                  y='station',
+                  row='variable',
+                  col_wrap=2,
+                  sharey=False,
+                  sharex=False)
+
+        plt.show()
+
         r_pearson = xr.corr(da.sel(station='Ref'), da, dim='time')
         sns.heatmap(r_pearson.transpose().to_pandas().drop('Ref')
                     , annot=True
@@ -316,6 +371,8 @@ if __name__ == '__main__':
                     ).set_title('Pearson\'s r')
         plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr.png')
         plt.show()
+        r_pearson.groupby('variable').mean(dim='station')
+        r_pearson.groupby('variable').std(dim='station')
 
         r2_pearson = r_pearson ** 2
         sns.heatmap(r2_pearson.transpose().to_pandas().drop('Ref')
@@ -326,6 +383,8 @@ if __name__ == '__main__':
                     ).set_title('Pearson\'s r²')
         plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr2.png')
         plt.show()
+        r2_pearson.groupby('variable').mean(dim='station')
+        r2_pearson.groupby('variable').std(dim='station')
 
         r2_precal = LeoMetrics('r2').apply(da, da.sel(station='Ref').drop('station'))
         sns.heatmap(r2_precal.to_pandas().drop('Ref')
@@ -336,9 +395,11 @@ if __name__ == '__main__':
                     ).set_title('R²')
         plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_r2.png')
         plt.show()
+        r2_precal.groupby('variable').mean(dim='station')
+        r2_precal.groupby('variable').std(dim='station')
 
-        mse_precal = LeoMetrics('mse').apply(da, da.sel(station='Ref').drop('station')) ** 0.5
-        sns.heatmap(mse_precal.to_pandas().drop('Ref')
+        rmse_precal = LeoMetrics('mse').apply(da, da.sel(station='Ref').drop('station')) ** 0.5
+        sns.heatmap(rmse_precal.to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
                     , linewidths=2
@@ -346,6 +407,8 @@ if __name__ == '__main__':
                     ).set_title('Root-mean-square error')
         plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_rmse.png')
         plt.show()
+        rmse_precal.groupby('variable').mean(dim='station')
+        rmse_precal.groupby('variable').std(dim='station')
 
         mape_precal = LeoMetrics('mape').apply(da, da.sel(station='Ref').drop('station'))
         sns.heatmap(mape_precal.to_pandas().drop('Ref')
@@ -356,6 +419,8 @@ if __name__ == '__main__':
                     ).set_title('Mean absolute percentage error')
         plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_mape.png')
         plt.show()
+        mape_precal.groupby('variable').mean(dim='station')
+        mape_precal.groupby('variable').std(dim='station')
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
