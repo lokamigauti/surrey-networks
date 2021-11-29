@@ -9,8 +9,10 @@ from sklearn.metrics import r2_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_percentage_error
 import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
 import seaborn as sns
 import json
+
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
 LCS = 'WokingNetwork/'
@@ -22,6 +24,7 @@ class LeoMetrics:
         'mse': mean_squared_error,
         'mape': mean_absolute_percentage_error
     }
+
     def __init__(self, metric, sampledim='time'):
         assert metric in self.metrics_dict.keys(), "Metric not founded"
         self.metric = metric
@@ -50,12 +53,11 @@ class LeoMetrics:
             )
         y_expanded = xr.concat(y_expanded, dim=X[x_extra_dim])
 
-
         X_p = self.preprocess(X)
         y_p = self.preprocess(y_expanded)
 
         f = self.metrics_dict[self.metric]
-        da_metric = X_p.isel({self.sampledim: 0}).drop(self.sampledim)\
+        da_metric = X_p.isel({self.sampledim: 0}).drop(self.sampledim) \
             .copy(data=f(y_p.values, X_p.values, multioutput='raw_values'))
         return da_metric.unstack()
 
@@ -80,7 +82,7 @@ def test_ridge(X_train, y_train, X_test, y_test, alpha, plot=False):
 
     if plot:
         fig, ax = plt.subplots()
-        ax.plot(y_train, X_train[:,0], '.', label='sensor')
+        ax.plot(y_train, X_train[:, 0], '.', label='sensor')
         ax.plot(y_train, reg.predict(X_train_scaled), '.', label='calibration')
         x_vals = np.array(ax.get_xlim())
         y_vals = x_vals
@@ -90,7 +92,7 @@ def test_ridge(X_train, y_train, X_test, y_test, alpha, plot=False):
         plt.show()
 
         fig, ax = plt.subplots()
-        ax.plot(y_test, X_test[:,0], '.', label='sensor')
+        ax.plot(y_test, X_test[:, 0], '.', label='sensor')
         ax.plot(y_test, y_pred, '.', label='calibration')
         x_vals = np.array(ax.get_xlim())
         y_vals = x_vals
@@ -175,7 +177,6 @@ def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs)
     return params_dict
 
 
-
 def get_ridge_parameters(alpha, degree, targets, save=False):
     regression_params = {}
     for target in targets:
@@ -211,7 +212,7 @@ def calibrate(station_outputs, params):
             else:
                 station_output = np.array([station_outputs[n], np.zeros(station_outputs[n].shape)])
             station_output_poly = poly_features.fit_transform(station_output)[0]
-            station_output_poly_normalised = (station_output_poly - params['mean'])/params['std']
+            station_output_poly_normalised = (station_output_poly - params['mean']) / params['std']
             polys = station_output_poly_normalised * params['coef']
             y[n] = params['intercept'] + polys.sum()
     return y
@@ -237,7 +238,7 @@ def calibrator(data, target, calibration_params):
     y = calibrate(X.reshape(X.shape[1:3]).transpose(), calibration_params[target][station_]).copy()
     da = xr.DataArray(
         y.reshape(-1, 1),
-        coords=[('time', data.time.values.copy()), ('variable', [target+'_cal'])])
+        coords=[('time', data.time.values.copy()), ('variable', [target + '_cal'])])
     da = da.astype('float32')
     return da
 
@@ -279,69 +280,82 @@ if __name__ == '__main__':
         pm_calibrated_path = OUTPUT_DIR + LCS + 'pm_calibrated.nc'
         pm_calibrated = xr.open_dataarray(pm_calibrated_path)
 
-    r_pearson = xr.corr(da.sel(station='Ref'), da, dim='time')
-    sns.heatmap(r_pearson.transpose().to_pandas()
-                , annot=True
-                , cmap='viridis'
-                , linewidths=2
-                , linecolor='white'
-                ).set_title('Pearson\'s r')
-    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr.png')
-    plt.show()
-
-    r2_pearson = r_pearson ** 2
-    sns.heatmap(r2_pearson.transpose().to_pandas()
-                , annot=True
-                , cmap='viridis'
-                , linewidths=2
-                , linecolor='white'
-                ).set_title('Pearson\'s r²')
-    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr2.png')
-    plt.show()
-
-
-    r2_precal = LeoMetrics('r2').apply(da, da.sel(station='Ref').drop('station'))
-    sns.heatmap(r2_precal.to_pandas()
-                , annot=True
-                , cmap='viridis'
-                , linewidths=2
-                , linecolor='white'
-                ).set_title('R²')
-    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_r2.png')
-    plt.show()
-
-    mse_precal = LeoMetrics('mse').apply(da, da.sel(station='Ref').drop('station')) ** 0.5
-    sns.heatmap(mse_precal.to_pandas()
-                , annot=True
-                , cmap='viridis'
-                , linewidths=2
-                , linecolor='white'
-                ).set_title('Root-mean-square error')
-    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_rmse.png')
-    plt.show()
-
-    mape_precal = LeoMetrics('mape').apply(da, da.sel(station='Ref').drop('station'))
-    sns.heatmap(mape_precal.to_pandas()
-                , annot=True
-                , cmap='viridis'
-                , linewidths=2
-                , linecolor='white'
-                ).set_title('Mean absolute percentage error')
-    plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_mape.png')
-    plt.show()
-
     if characterise_pre_cal:
-        da_by_station = list(da.groupby('station'))
-        ref = da_by_station[0][1]
-        ref_list = list(ref.groupby('variable'))
-        ref_dict = {ref_list[i][0]: ref_list[i][1] for i in range(0, len(ref_list))}
-        da_stack = list(da.stack(station_variable=['station', 'variable']).groupby('station_variable'))
-        r2 = xr.zeroeslike(da.isel(time=0).drop('time'))
-        # for stat_var, stat_var_array in da_stack:
-        #     station, variable = stat_var
-        #     r2[] = r2_score(ref_dict[variable], stat_var_array)
+        stations = np.roll(da.indexes['station'].values, -1)
+        variables = ['pm1', 'rh', 'pm25', 'temp', 'pm10']
+        titles = ['PM\u2081', 'Relative Humidity',
+                  'PM\u2082\u2085', 'Temperature',
+                  'PM\u2081\u2080', '']
+        labels = ['μg/m³', '%',
+                  'μg/m³', '°C',
+                  'μg/m³', '']
+        date_form = DateFormatter("%H:%M")
+        g = da.reindex(variable=['pm1', 'rh', 'pm25', 'temp', 'pm10']
+                       , station=stations) \
+            .plot.line(x='time'
+                       , row='variable'
+                       , col_wrap=2
+                       , sharey=False
+                       , sharex=False
+                       , add_legend=False)
+        for i, ax in enumerate(g.axes.flat):
+            ax.set_title(titles[i])
+            ax.set_ylabel(labels[i])
+            ax.set_xlabel('')
+            ax.xaxis.set_major_formatter(date_form)
+        g.fig.legend(labels=stations, loc='lower right', bbox_to_anchor=(0.39, 0.1, 0.5, 0.5))
+        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_timeseries.png')
+        plt.show()
 
+        r_pearson = xr.corr(da.sel(station='Ref'), da, dim='time')
+        sns.heatmap(r_pearson.transpose().to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Pearson\'s r')
+        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr.png')
+        plt.show()
 
+        r2_pearson = r_pearson ** 2
+        sns.heatmap(r2_pearson.transpose().to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Pearson\'s r²')
+        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr2.png')
+        plt.show()
+
+        r2_precal = LeoMetrics('r2').apply(da, da.sel(station='Ref').drop('station'))
+        sns.heatmap(r2_precal.to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('R²')
+        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_r2.png')
+        plt.show()
+
+        mse_precal = LeoMetrics('mse').apply(da, da.sel(station='Ref').drop('station')) ** 0.5
+        sns.heatmap(mse_precal.to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Root-mean-square error')
+        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_rmse.png')
+        plt.show()
+
+        mape_precal = LeoMetrics('mape').apply(da, da.sel(station='Ref').drop('station'))
+        sns.heatmap(mape_precal.to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Mean absolute percentage error')
+        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_mape.png')
+        plt.show()
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
@@ -359,8 +373,8 @@ if __name__ == '__main__':
                  'pm25': 10,
                  'pm1': 5}
         degree = {'pm10': 3,
-                 'pm25': 3,
-                 'pm1': 3}
+                  'pm25': 3,
+                  'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
         calibration_params = get_ridge_parameters(alpha, degree, targets, save=True)
         pm_calibrated = make_calibration(data, calibration_params, save=True)
