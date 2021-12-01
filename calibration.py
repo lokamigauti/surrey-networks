@@ -295,8 +295,30 @@ def cross_corr(da, station, reference, variable, dt, mode='full', method='auto',
     return lag
 
 
+def flatten_data(da, sample_dim='time', feature_dim='variable', output_path=False):
+    """
+    Transform DataArray into a flat DataFrame. Saves a file if output_dir is provided.
+    :param da: 3D+DataArray
+    :param sample_dim: String with name of sample dimension
+    :param feature_dim: String with name of feature dimension
+    :param output_path: String with output path
+    :return: Simple-index DataFrame
+    """
+    dims_to_features = set(da.dims) - {sample_dim, feature_dim}
+    dims_to_features = np.array(tuple(dims_to_features))
+    df = da.stack(station_variable=[dims_to_features, feature_dim]).to_pandas()
+    df = df.reset_index().melt(id_vars=sample_dim)
+    df = df.pivot_table(index=[sample_dim, dims_to_features]
+                                   , columns=[feature_dim]
+                                   , values=['value'])
+    df = df.droplevel(0, axis=1).reset_index(level=dims_to_features)
+    if output_path:
+        df.to_csv(output_path)
+    return df
+
+
 if __name__ == '__main__':
-    characterise_pre_cal = True
+    characterise_cal = True
     find_hyperparameters = False
     calibrate_stations = False
     plotting = False
@@ -312,8 +334,9 @@ if __name__ == '__main__':
         calibration_params = import_json_as_dict(ridge_parameters_path)
         pm_calibrated_path = OUTPUT_DIR + LCS + 'pm_calibrated.nc'
         pm_calibrated = xr.open_dataarray(pm_calibrated_path)
+        data = data.combine_first(pm_calibrated)
 
-    if characterise_pre_cal:
+    if characterise_cal:
         stations = np.roll(da.indexes['station'].values, -1)
         variables = ['pm1', 'rh', 'pm25', 'temp', 'pm10']
         titles = ['PM\u2081', 'Relative Humidity',
@@ -422,6 +445,8 @@ if __name__ == '__main__':
         mape_precal.groupby('variable').mean(dim='station')
         mape_precal.groupby('variable').std(dim='station')
 
+
+
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
         y = da.sel(station='Ref', variable='pm1').values.copy()
@@ -446,8 +471,9 @@ if __name__ == '__main__':
 
     if plotting:
         # Plots
-        X = da.sel(station='WokingGreens#5', variable=['pm1', 'rh', 'temp']).values.copy()
-        X_cal = calibrate(X, regression_params['pm1']['WokingGreens#5']).copy()
+        y = da.sel(station='Ref', variable=['pm1']).values.copy()
+        X = da.sel(station='WokingGreens#1', variable=['pm1', 'rh', 'temp']).values.copy()
+        X_cal = calibrate(X, calibration_params['pm1']['WokingGreens#5']).copy()
 
         fig, ax = plt.subplots()
         ax.plot(y, X[:, 0], '.', label='sensor')
