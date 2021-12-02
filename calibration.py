@@ -241,17 +241,18 @@ def json2dict(x):
 def calibrator(data, target, calibration_params):
     X = data.sel(variable=[target, 'rh', 'temp']).values.copy()
     station_ = data.station.values.item()
+    if len(X.shape) == 3:
+        X = X[0]
     if X.shape[0] == 3:
         X = X.transpose()
     y = calibrate(X, calibration_params[target][station_]).copy()
-    da = xr.DataArray(
-        y.reshape(-1, 1),
+    da = xr.DataArray(y.reshape(-1, 1),
         coords=[('time', data.time.values.copy()), ('variable', [target + '_cal'])])
     da = da.astype('float32')
     return da
 
 
-def make_calibration(data, calibration_params, output_path=False):
+def make_calibration(data, calibration_params, output_path='none'):
     da_calibrated = data.copy().rename('calibrated')
     pms = ['pm10', 'pm25', 'pm1']
     cal_list = []
@@ -259,7 +260,7 @@ def make_calibration(data, calibration_params, output_path=False):
         cal = da_calibrated.groupby('station').map(calibrator, args=(pm, calibration_params)).copy().rename('case')
         cal_list.append(cal)
     da_calibrated = xr.concat(cal_list, dim='variable')
-    if output_path:
+    if not output_path == 'none':
         da_calibrated.to_netcdf(output_path)
     return da_calibrated
 
@@ -298,7 +299,7 @@ def cross_corr(da, station, reference, variable, dt, mode='full', method='auto',
     return lag
 
 
-def flatten_data(da, sample_dim='time', feature_dim='variable', output_path=False):
+def flatten_data(da, sample_dim='time', feature_dim='variable', output_path='none'):
     """
     Transform DataArray into a flat DataFrame. Saves a file if output_dir is provided.
     :param da: 3D+DataArray
@@ -315,15 +316,15 @@ def flatten_data(da, sample_dim='time', feature_dim='variable', output_path=Fals
                         , columns=[feature_dim]
                         , values=['value'])
     df = df.droplevel(0, axis=1).reset_index(level=dims_to_features)
-    if output_path:
+    if not output_path == 'none':
         df.to_csv(output_path)
     return df
 
 
 if __name__ == '__main__':
-    characterise_cal = True
+    characterise_cal = False
     find_hyperparameters = False
-    calibrate_stations = False
+    calibrate_stations = True
     plotting = False
 
     # load data
@@ -449,26 +450,39 @@ if __name__ == '__main__':
 
         # Calibration
 
-        alpha = {'pm10': 30,
+        alpha = {'pm10': 20,
                  'pm25': 10,
-                 'pm1': 5}
+                 'pm1': 3}
         degree = {'pm10': 3,
                   'pm25': 3,
                   'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
         calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, save=True)
         chamber_calibration = make_calibration(calibration_data.drop_sel(station='Ref'), calibration_params)
+        chamber_calibration = chamber_calibration.combine_first(calibration_data)
+        chamber_calibration.loc[dict(station='Ref', variable=['pm1_cal', 'pm25_cal', 'pm10_cal'])] \
+            = chamber_calibration.loc[dict(station='Ref', variable=['pm1', 'pm25', 'pm10'])].values
+        chamber_calibration = chamber_calibration.reindex(variable=['pm1',
+                                                                    'pm1_cal',
+                                                                    'pm25',
+                                                                    'pm25_cal',
+                                                                    'pm10',
+                                                                    'pm10_cal',
+                                                                    'rh',
+                                                                    'temp'])
 
-        stations = np.roll(data.indexes['station'].values, -1)
-        variables = ['pm1_cal', 'rh', 'pm25_cal', 'temp', 'pm10_cal']
-        titles = ['PM\u2081', 'Relative Humidity',
-                  'PM\u2082\u2085', 'Temperature',
-                  'PM\u2081\u2080', '']
-        labels = ['μg/m³', '%',
-                  'μg/m³', '°C',
-                  'μg/m³', '']
+        stations = np.roll(chamber_calibration.indexes['station'].values, -1)
+        variables = ['pm1_cal', 'pm25_cal', 'pm10_cal']
+        titles = ['PM\u2081 Calibrated',
+                  'PM\u2082\u2085 Calibrated',
+                  'PM\u2081\u2080 Calibrated',
+                  '']
+        labels = ['μg/m³',
+                  'μg/m³',
+                  'μg/m³',
+                  '']
         date_form = DateFormatter("%H:%M")
-        g = data.reindex(variable=['pm1_cal', 'rh', 'pm25_cal', 'temp', 'pm10_cal']
+        g = chamber_calibration.reindex(variable=['pm1_cal', 'pm25_cal', 'pm10_cal']
                        , station=stations) \
             .plot.line(x='time'
                        , row='variable'
@@ -482,8 +496,101 @@ if __name__ == '__main__':
             ax.set_xlabel('')
             ax.xaxis.set_major_formatter(date_form)
         g.fig.legend(labels=stations, loc='lower right', bbox_to_anchor=(0.39, 0.1, 0.5, 0.5))
-        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_timeseries.png')
+        # plt.savefig(OUTPUT_DIR + LCS + 'cal_timeseries.png')
         plt.show()
+
+        stations = np.roll(chamber_calibration.indexes['station'].values, -1)
+        variables = ['pm1', 'pm25', 'pm10']
+        titles = ['PM\u2081 Uncalibrated',
+                  'PM\u2082\u2085 Uncalibrated',
+                  'PM\u2081\u2080 Uncalibrated',
+                  '']
+        labels = ['μg/m³',
+                  'μg/m³',
+                  'μg/m³',
+                  '']
+        date_form = DateFormatter("%H:%M")
+        g = chamber_calibration.reindex(variable=variables
+                                        , station=stations) \
+            .plot.line(x='time'
+                       , row='variable'
+                       , col_wrap=2
+                       , sharey=False
+                       , sharex=False
+                       , add_legend=False)
+        for i, ax in enumerate(g.axes.flat):
+            ax.set_title(titles[i])
+            ax.set_ylabel(labels[i])
+            ax.set_xlabel('')
+            ax.xaxis.set_major_formatter(date_form)
+        g.fig.legend(labels=stations, loc='lower right', bbox_to_anchor=(0.39, 0.1, 0.5, 0.5))
+        # plt.savefig(OUTPUT_DIR + LCS + 'cal_timeseries.png')
+        plt.show()
+
+        chamber_calibration_pm = chamber_calibration.drop_sel(variable=['rh', 'temp'])
+
+        r_pearson = xr.corr(chamber_calibration_pm.sel(station='Ref'), chamber_calibration_pm, dim='time')
+        sns.heatmap(r_pearson.transpose().to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Pearson\'s r')
+        # plt.savefig(OUTPUT_DIR + LCS + 'cal_pearsonr.png')
+        plt.show()
+        r_pearson.groupby('variable').mean(dim='station')
+        r_pearson.groupby('variable').std(dim='station')
+
+        r2_pearson = r_pearson ** 2
+        sns.heatmap(r2_pearson.transpose().to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Pearson\'s r²')
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr2.png')
+        plt.show()
+        r2_pearson.groupby('variable').mean(dim='station')
+        r2_pearson.groupby('variable').std(dim='station')
+
+        r2_precal = LeoMetrics('r2').apply(chamber_calibration_pm,
+                                           chamber_calibration_pm.sel(station='Ref').drop('station'))
+        sns.heatmap(r2_precal.to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('R²')
+        # plt.savefig(OUTPUT_DIR + LCS + 'cal_r2.png')
+        plt.show()
+        r2_precal.groupby('variable').mean(dim='station')
+        r2_precal.groupby('variable').std(dim='station')
+
+        rmse_precal = LeoMetrics('mse').apply(chamber_calibration_pm,
+                                              chamber_calibration_pm.sel(station='Ref').drop('station')) ** 0.5
+        sns.heatmap(rmse_precal.to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Root-mean-square error')
+        # plt.savefig(OUTPUT_DIR + LCS + 'cal_rmse.png')
+        plt.show()
+        rmse_precal.groupby('variable').mean(dim='station')
+        rmse_precal.groupby('variable').std(dim='station')
+
+        mape_precal = LeoMetrics('mape').apply(chamber_calibration_pm,
+                                               chamber_calibration_pm.sel(station='Ref').drop('station'))
+        sns.heatmap(mape_precal.to_pandas().drop('Ref')
+                    , annot=True
+                    , cmap='viridis'
+                    , linewidths=2
+                    , linecolor='white'
+                    ).set_title('Mean absolute percentage error')
+        # plt.savefig(OUTPUT_DIR + LCS + 'cal_mape.png')
+        plt.show()
+        mape_precal.groupby('variable').mean(dim='station')
+        mape_precal.groupby('variable').std(dim='station')
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
@@ -497,9 +604,9 @@ if __name__ == '__main__':
 
     if calibrate_stations:
         # make parameters json
-        alpha = {'pm10': 30,
+        alpha = {'pm10': 20,
                  'pm25': 10,
-                 'pm1': 5}
+                 'pm1': 3}
         degree = {'pm10': 3,
                   'pm25': 3,
                   'pm1': 3}
