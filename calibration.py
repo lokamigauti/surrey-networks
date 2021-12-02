@@ -240,8 +240,10 @@ def json2dict(x):
 
 def calibrator(data, target, calibration_params):
     X = data.sel(variable=[target, 'rh', 'temp']).values.copy()
-    station_ = data.station.values[0]
-    y = calibrate(X.reshape(X.shape[1:3]).transpose(), calibration_params[target][station_]).copy()
+    station_ = data.station.values.item()
+    if X.shape[0] == 3:
+        X = X.transpose()
+    y = calibrate(X, calibration_params[target][station_]).copy()
     da = xr.DataArray(
         y.reshape(-1, 1),
         coords=[('time', data.time.values.copy()), ('variable', [target + '_cal'])])
@@ -249,7 +251,7 @@ def calibrator(data, target, calibration_params):
     return da
 
 
-def make_calibration(data, calibration_params, save=False):
+def make_calibration(data, calibration_params, output_path=False):
     da_calibrated = data.copy().rename('calibrated')
     pms = ['pm10', 'pm25', 'pm1']
     cal_list = []
@@ -257,8 +259,8 @@ def make_calibration(data, calibration_params, save=False):
         cal = da_calibrated.groupby('station').map(calibrator, args=(pm, calibration_params)).copy().rename('case')
         cal_list.append(cal)
     da_calibrated = xr.concat(cal_list, dim='variable')
-    if save:
-        da_calibrated.to_netcdf(OUTPUT_DIR + LCS + 'pm_calibrated.nc')
+    if output_path:
+        da_calibrated.to_netcdf(output_path)
     return da_calibrated
 
 
@@ -326,7 +328,7 @@ if __name__ == '__main__':
 
     # load data
     calibration_data_path = DATA_DIR + LCS + 'calibration_std.csv'
-    da = calibration_data_import(calibration_data_path)
+    calibration_data = calibration_data_import(calibration_data_path)
     station_data_path = DATA_DIR + 'Imported/lcs.nc'
     data = xr.open_dataarray(station_data_path)
 
@@ -338,7 +340,7 @@ if __name__ == '__main__':
         data = data.combine_first(pm_calibrated)
 
     if characterise_cal:
-        stations = np.roll(da.indexes['station'].values, -1)
+        stations = np.roll(calibration_data.indexes['station'].values, -1)
         variables = ['pm1', 'rh', 'pm25', 'temp', 'pm10']
         titles = ['PM\u2081', 'Relative Humidity',
                   'PM\u2082\u2085', 'Temperature',
@@ -347,8 +349,8 @@ if __name__ == '__main__':
                   'μg/m³', '°C',
                   'μg/m³', '']
         date_form = DateFormatter("%H:%M")
-        g = da.reindex(variable=['pm1', 'rh', 'pm25', 'temp', 'pm10']
-                       , station=stations) \
+        g = calibration_data.reindex(variable=['pm1', 'rh', 'pm25', 'temp', 'pm10']
+                                     , station=stations) \
             .plot.line(x='time'
                        , row='variable'
                        , col_wrap=2
@@ -364,28 +366,28 @@ if __name__ == '__main__':
         # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_timeseries.png')
         plt.show()
 
-        from holoviews.operation import gridmatrix
+        # from holoviews.operation import gridmatrix
+        #
+        # hv_ds = hv.Dataset(da.to_dataset(dim='station'))
+        # hv_ds.to(hv.Image, kdims=["time", "station"], dynamic=False)
+        # show(hv.render(scatter))
+        # group = hv_ds.groupby('variable', container_type=hv.NdOverlay)
+        # grid = gridmatrix(group, diagonal_type=hv.Scatter)
+        #
+        # img = hv.Image((range(3), range(5), np.random.rand(5, 3)), datatype=['grid'])
+        # img
+        # show(hv.render(img))
 
-        hv_ds = hv.Dataset(da.to_dataset(dim='station'))
-        hv_ds.to(hv.Image, kdims=["time", "station"], dynamic=False)
-        show(hv.render(scatter))
-        group = hv_ds.groupby('variable', container_type=hv.NdOverlay)
-        grid = gridmatrix(group, diagonal_type=hv.Scatter)
+        # da.plot(x='station',
+        #         y='station',
+        #         row='variable',
+        #         col_wrap=2,
+        #         sharey=False,
+        #         sharex=False)
+        #
+        # plt.show()
 
-        img = hv.Image((range(3), range(5), np.random.rand(5, 3)), datatype=['grid'])
-        img
-        show(hv.render(img))
-
-        da.plot(x='station',
-                y='station',
-                row='variable',
-                col_wrap=2,
-                sharey=False,
-                sharex=False)
-
-        plt.show()
-
-        r_pearson = xr.corr(da.sel(station='Ref'), da, dim='time')
+        r_pearson = xr.corr(calibration_data.sel(station='Ref'), calibration_data, dim='time')
         sns.heatmap(r_pearson.transpose().to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
@@ -409,7 +411,7 @@ if __name__ == '__main__':
         r2_pearson.groupby('variable').mean(dim='station')
         r2_pearson.groupby('variable').std(dim='station')
 
-        r2_precal = LeoMetrics('r2').apply(da, da.sel(station='Ref').drop('station'))
+        r2_precal = LeoMetrics('r2').apply(calibration_data, calibration_data.sel(station='Ref').drop('station'))
         sns.heatmap(r2_precal.to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
@@ -421,7 +423,7 @@ if __name__ == '__main__':
         r2_precal.groupby('variable').mean(dim='station')
         r2_precal.groupby('variable').std(dim='station')
 
-        rmse_precal = LeoMetrics('mse').apply(da, da.sel(station='Ref').drop('station')) ** 0.5
+        rmse_precal = LeoMetrics('mse').apply(calibration_data, calibration_data.sel(station='Ref').drop('station')) ** 0.5
         sns.heatmap(rmse_precal.to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
@@ -433,7 +435,7 @@ if __name__ == '__main__':
         rmse_precal.groupby('variable').mean(dim='station')
         rmse_precal.groupby('variable').std(dim='station')
 
-        mape_precal = LeoMetrics('mape').apply(da, da.sel(station='Ref').drop('station'))
+        mape_precal = LeoMetrics('mape').apply(calibration_data, calibration_data.sel(station='Ref').drop('station'))
         sns.heatmap(mape_precal.to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
@@ -454,8 +456,8 @@ if __name__ == '__main__':
                   'pm25': 3,
                   'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
-        calibration_params = get_ridge_parameters(alpha, degree, targets, save=True)
-        pm_calibrated = make_calibration(data, calibration_params, save=True)
+        calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, save=True)
+        chamber_calibration = make_calibration(calibration_data.drop_sel(station='Ref'), calibration_params)
 
         stations = np.roll(data.indexes['station'].values, -1)
         variables = ['pm1_cal', 'rh', 'pm25_cal', 'temp', 'pm10_cal']
@@ -485,8 +487,8 @@ if __name__ == '__main__':
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
-        y = da.sel(station='Ref', variable='pm1').values.copy()
-        X = da.sel(station='WokingGreens#3', variable=['pm1', 'rh', 'temp']).values.copy()
+        y = calibration_data.sel(station='Ref', variable='pm1').values.copy()
+        X = calibration_data.sel(station='WokingGreens#3', variable=['pm1', 'rh', 'temp']).values.copy()
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.20, random_state=13462)
         alpha = 5
         degree = 3
@@ -502,16 +504,16 @@ if __name__ == '__main__':
                   'pm25': 3,
                   'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
-        calibration_params = get_ridge_parameters(alpha, degree, targets, save=True)
-        pm_calibrated = make_calibration(data, calibration_params, save=True)
+        calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, save=True)
+        pm_calibrated = make_calibration(data, calibration_params, output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
 
     if plotting:
         # Plots
-        y = da.sel(station='Ref', variable=['pm1']).values.copy()
-        X = da.sel(station='WokingGreens#1', variable=['pm1', 'rh', 'temp']).values.copy()
+        y = calibration_data.sel(station='Ref', variable=['pm1']).values.copy()
+        X = calibration_data.sel(station='WokingGreens#1', variable=['pm1', 'rh', 'temp']).values.copy()
         X_cal = calibrate(X, calibration_params['pm1']['WokingGreens#5']).copy()
 
         fig, ax = plt.subplots()
@@ -524,4 +526,4 @@ if __name__ == '__main__':
         ax.legend(loc='upper left')
         plt.show()
 
-        da.sel(station='WokingGreens#1')['pm10_cal'] = calibrate(X, regression_params['pm10']['WokingGreens#1']).copy()
+        calibration_data.sel(station='WokingGreens#1')['pm10_cal'] = calibrate(X, regression_params['pm10']['WokingGreens#1']).copy()
