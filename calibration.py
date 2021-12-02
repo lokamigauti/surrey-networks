@@ -15,6 +15,7 @@ import seaborn as sns
 import json
 import holoviews as hv
 from holoviews import opts
+
 hv.extension('bokeh')
 from bokeh.plotting import show
 
@@ -306,11 +307,11 @@ def flatten_data(da, sample_dim='time', feature_dim='variable', output_path=Fals
     """
     dims_to_features = set(da.dims) - {sample_dim, feature_dim}
     dims_to_features = np.array(tuple(dims_to_features))
-    df = da.stack(station_variable=[dims_to_features, feature_dim]).to_pandas()
+    df = da.stack(station_variable=np.append(dims_to_features, feature_dim)).to_pandas()
     df = df.reset_index().melt(id_vars=sample_dim)
-    df = df.pivot_table(index=[sample_dim, dims_to_features]
-                                   , columns=[feature_dim]
-                                   , values=['value'])
+    df = df.pivot_table(index=np.append(sample_dim, dims_to_features).tolist()
+                        , columns=[feature_dim]
+                        , values=['value'])
     df = df.droplevel(0, axis=1).reset_index(level=dims_to_features)
     if output_path:
         df.to_csv(output_path)
@@ -365,7 +366,6 @@ if __name__ == '__main__':
 
         from holoviews.operation import gridmatrix
 
-
         hv_ds = hv.Dataset(da.to_dataset(dim='station'))
         hv_ds.to(hv.Image, kdims=["time", "station"], dynamic=False)
         show(hv.render(scatter))
@@ -377,11 +377,11 @@ if __name__ == '__main__':
         show(hv.render(img))
 
         da.plot(x='station',
-                  y='station',
-                  row='variable',
-                  col_wrap=2,
-                  sharey=False,
-                  sharex=False)
+                y='station',
+                row='variable',
+                col_wrap=2,
+                sharey=False,
+                sharex=False)
 
         plt.show()
 
@@ -444,8 +444,6 @@ if __name__ == '__main__':
         plt.show()
         mape_precal.groupby('variable').mean(dim='station')
         mape_precal.groupby('variable').std(dim='station')
-
-
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
