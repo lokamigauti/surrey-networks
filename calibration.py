@@ -183,7 +183,7 @@ def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs)
     return params_dict
 
 
-def get_ridge_parameters(alpha, degree, targets, save=False):
+def get_ridge_parameters(da, alpha, degree, targets, save=False):
     regression_params = {}
     for target in targets:
         y = da.sel(station='Ref', variable=target)
@@ -361,7 +361,7 @@ if __name__ == '__main__':
             ax.set_xlabel('')
             ax.xaxis.set_major_formatter(date_form)
         g.fig.legend(labels=stations, loc='lower right', bbox_to_anchor=(0.39, 0.1, 0.5, 0.5))
-        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_timeseries.png')
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_timeseries.png')
         plt.show()
 
         from holoviews.operation import gridmatrix
@@ -392,7 +392,7 @@ if __name__ == '__main__':
                     , linewidths=2
                     , linecolor='white'
                     ).set_title('Pearson\'s r')
-        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr.png')
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr.png')
         plt.show()
         r_pearson.groupby('variable').mean(dim='station')
         r_pearson.groupby('variable').std(dim='station')
@@ -404,7 +404,7 @@ if __name__ == '__main__':
                     , linewidths=2
                     , linecolor='white'
                     ).set_title('Pearson\'s r²')
-        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr2.png')
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_pearsonr2.png')
         plt.show()
         r2_pearson.groupby('variable').mean(dim='station')
         r2_pearson.groupby('variable').std(dim='station')
@@ -416,7 +416,7 @@ if __name__ == '__main__':
                     , linewidths=2
                     , linecolor='white'
                     ).set_title('R²')
-        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_r2.png')
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_r2.png')
         plt.show()
         r2_precal.groupby('variable').mean(dim='station')
         r2_precal.groupby('variable').std(dim='station')
@@ -428,7 +428,7 @@ if __name__ == '__main__':
                     , linewidths=2
                     , linecolor='white'
                     ).set_title('Root-mean-square error')
-        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_rmse.png')
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_rmse.png')
         plt.show()
         rmse_precal.groupby('variable').mean(dim='station')
         rmse_precal.groupby('variable').std(dim='station')
@@ -440,10 +440,48 @@ if __name__ == '__main__':
                     , linewidths=2
                     , linecolor='white'
                     ).set_title('Mean absolute percentage error')
-        plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_mape.png')
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_mape.png')
         plt.show()
         mape_precal.groupby('variable').mean(dim='station')
         mape_precal.groupby('variable').std(dim='station')
+
+        # Calibration
+
+        alpha = {'pm10': 30,
+                 'pm25': 10,
+                 'pm1': 5}
+        degree = {'pm10': 3,
+                  'pm25': 3,
+                  'pm1': 3}
+        targets = ['pm10', 'pm25', 'pm1']
+        calibration_params = get_ridge_parameters(alpha, degree, targets, save=True)
+        pm_calibrated = make_calibration(data, calibration_params, save=True)
+
+        stations = np.roll(data.indexes['station'].values, -1)
+        variables = ['pm1_cal', 'rh', 'pm25_cal', 'temp', 'pm10_cal']
+        titles = ['PM\u2081', 'Relative Humidity',
+                  'PM\u2082\u2085', 'Temperature',
+                  'PM\u2081\u2080', '']
+        labels = ['μg/m³', '%',
+                  'μg/m³', '°C',
+                  'μg/m³', '']
+        date_form = DateFormatter("%H:%M")
+        g = data.reindex(variable=['pm1_cal', 'rh', 'pm25_cal', 'temp', 'pm10_cal']
+                       , station=stations) \
+            .plot.line(x='time'
+                       , row='variable'
+                       , col_wrap=2
+                       , sharey=False
+                       , sharex=False
+                       , add_legend=False)
+        for i, ax in enumerate(g.axes.flat):
+            ax.set_title(titles[i])
+            ax.set_ylabel(labels[i])
+            ax.set_xlabel('')
+            ax.xaxis.set_major_formatter(date_form)
+        g.fig.legend(labels=stations, loc='lower right', bbox_to_anchor=(0.39, 0.1, 0.5, 0.5))
+        # plt.savefig(OUTPUT_DIR + LCS + 'pre_cal_timeseries.png')
+        plt.show()
 
     if find_hyperparameters:
         # The hyperparameters determination was performed by eye because of the low number of samples
