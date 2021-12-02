@@ -468,6 +468,9 @@ if __name__ == '__main__':
         targets = ['pm10', 'pm25', 'pm1']
         calibration_params = get_ridge_parameters(alpha, degree, targets, save=True)
         pm_calibrated = make_calibration(data, calibration_params, save=True)
+        data = data.combine_first(pm_calibrated)
+        csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
+        flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
 
     if plotting:
         # Plots
