@@ -325,7 +325,6 @@ if __name__ == '__main__':
     characterise_cal = False
     find_hyperparameters = False
     calibrate_stations = True
-    plotting = False
 
     # load data
     calibration_data_path = DATA_DIR + LCS + 'calibration_std.csv'
@@ -606,31 +605,23 @@ if __name__ == '__main__':
         # make parameters json
         alpha = {'pm10': 20,
                  'pm25': 10,
-                 'pm1': 3}
+                 'pm1': 20}
         degree = {'pm10': 3,
                   'pm25': 3,
                   'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
+        weight_pol = 1
+        weight_temp = 0.5
+        weight_rh = 0.1
+        weight_pol_range = {'pol_real_min': 0,
+                            'pol_real_max': 15,
+                            'temp_real_min': 0,
+                            'temp_real_max': 20,
+                            'rh_real_min': 0,
+                            'rh_real_max': 100}
         calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, save=True)
         pm_calibrated = make_calibration(data, calibration_params, output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
-
-    if plotting:
-        # Plots
-        y = calibration_data.sel(station='Ref', variable=['pm1']).values.copy()
-        X = calibration_data.sel(station='WokingGreens#1', variable=['pm1', 'rh', 'temp']).values.copy()
-        X_cal = calibrate(X, calibration_params['pm1']['WokingGreens#5']).copy()
-
-        fig, ax = plt.subplots()
-        ax.plot(y, X[:, 0], '.', label='sensor')
-        ax.plot(y, X_cal, '.', label='calibration')
-        x_vals = np.array(ax.get_xlim())
-        y_vals = x_vals
-        ax.plot(x_vals, y_vals, '--')
-        ax.set_title(f'train{alpha}')
-        ax.legend(loc='upper left')
-        plt.show()
-
-        calibration_data.sel(station='WokingGreens#1')['pm10_cal'] = calibrate(X, regression_params['pm10']['WokingGreens#1']).copy()
+        a = 1
