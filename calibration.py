@@ -485,14 +485,20 @@ if __name__ == '__main__':
 
         # Calibration
 
-        alpha = {'pm10': 20,
-                 'pm25': 10,
-                 'pm1': 3}
+        alpha = {'pm10': 50,
+                 'pm25': 20,
+                 'pm1': 10}
         degree = {'pm10': 3,
                   'pm25': 3,
                   'pm1': 3}
+        weights_ranges = {'target_real_min': 0,
+                          'target_real_max': 15,
+                          'temp_real_min': 0,
+                          'temp_real_max': 20,
+                          'rh_real_min': 0,
+                          'rh_real_max': 100}
         targets = ['pm10', 'pm25', 'pm1']
-        calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, save=True)
+        calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, weights_ranges, save=True)
         chamber_calibration = make_calibration(calibration_data.drop_sel(station='Ref'), calibration_params)
         chamber_calibration = chamber_calibration.combine_first(calibration_data)
         chamber_calibration.loc[dict(station='Ref', variable=['pm1_cal', 'pm25_cal', 'pm10_cal'])] \
@@ -561,6 +567,8 @@ if __name__ == '__main__':
         g.fig.legend(labels=stations, loc='lower right', bbox_to_anchor=(0.39, 0.1, 0.5, 0.5))
         # plt.savefig(OUTPUT_DIR + LCS + 'cal_timeseries.png')
         plt.show()
+
+        # TODO: plot cal and uncal vs ref
 
         chamber_calibration_pm = chamber_calibration.drop_sel(variable=['rh', 'temp'])
 
@@ -640,8 +648,8 @@ if __name__ == '__main__':
     if calibrate_stations:
         # make parameters json
         alpha = {'pm10': 50,
-                 'pm25': 50,
-                 'pm1': 50}
+                 'pm25': 20,
+                 'pm1': 10}
         degree = {'pm10': 3,
                   'pm25': 3,
                   'pm1': 3}
