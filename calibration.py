@@ -141,14 +141,49 @@ def calibration_data_import(path):
     return da
 
 
-def apply_poly_ridge(X, y, degree, alpha):
+def weight_array(X, X_factor, X_real_min, X_real_max):
+    """
+    Make weights array, doubles the weight inside the real limits of the data
+    :param X: data np.array
+    :param X_factor: general multiplication factor
+    :param X_real_min: real minimum
+    :param X_real_max: real maximum
+    :return: weights
+    """
+
+    weights = np.ones(len(X)) * X_factor
+    for n, x, in enumerate(X):
+        if x > X_real_min & x < X_real_max:
+            weights[n] = weights[n] * 2
+    return weights
+
+
+def make_weights_array(X, weights_factors, weights_pol_ranges):
+    weights = []
+    for n in range(0, len(X[0])):
+        for k in ['target', 'temp', 'rh']:
+            weights.append(weight_array(X[:, n],
+                                  weights_factors[k],
+                                  weights_pol_ranges[k + '_real_min'],
+                                  weights_pol_ranges[k + '_real_max']))
+    weights = np.array(weights).reshape(X.shape)
+    return weights
+
+
+
+
+def apply_poly_ridge(X, y, degree, alpha, weights):
     poly_features = PolynomialFeatures(degree=degree, include_bias=False)
     X_poly = poly_features.fit_transform(X)
     scaler = StandardScaler().fit(X_poly)
     X_poly_scaled = scaler.transform(X_poly)
 
     reg = linear_model.Ridge(alpha=alpha)
-    reg.fit(X_poly_scaled, y)
+
+    if weights_param == 'none':
+        reg.fit(X_poly_scaled, y)
+    else:
+        reg.fit(X_poly_scaled, y, weights)
 
     return_dict = {'coef': reg.coef_,
                    'intercept': reg.intercept_,
@@ -208,6 +243,7 @@ def calibrate(station_outputs, params):
     else:
         y = np.zeros(len(station_outputs[:, 0]))
         station_outputs_length = len(station_outputs)
+
     poly_features = PolynomialFeatures(degree=params['poly_degree'], include_bias=False)
     for n in range(0, station_outputs_length):
         if np.any(np.isnan(station_outputs[n])):
@@ -217,6 +253,7 @@ def calibrate(station_outputs, params):
                 station_output = np.array([station_outputs, np.zeros(station_outputs.shape)])
             else:
                 station_output = np.array([station_outputs[n], np.zeros(station_outputs[n].shape)])
+
             station_output_poly = poly_features.fit_transform(station_output)[0]
             station_output_poly_normalised = (station_output_poly - params['mean']) / params['std']
             polys = station_output_poly_normalised * params['coef']
@@ -610,15 +647,16 @@ if __name__ == '__main__':
                   'pm25': 3,
                   'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
-        weight_pol = 1
-        weight_temp = 0.5
-        weight_rh = 0.1
-        weight_pol_range = {'pol_real_min': 0,
-                            'pol_real_max': 15,
+        weights = {'target': 1,
+                   'temp': 0.5,
+                   'rh': 0.1}
+        weights_pol_range = {'target_real_min': 0,
+                            'target_real_max': 15,
                             'temp_real_min': 0,
                             'temp_real_max': 20,
                             'rh_real_min': 0,
                             'rh_real_max': 100}
+
         calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, save=True)
         pm_calibrated = make_calibration(data, calibration_params, output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
         data = data.combine_first(pm_calibrated)
