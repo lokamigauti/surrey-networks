@@ -141,38 +141,36 @@ def calibration_data_import(path):
     return da
 
 
-def weight_array(X, X_factor, X_real_min, X_real_max):
+def weight_array(X, X_real_min, X_real_max):
     """
     Make weights array, doubles the weight inside the real limits of the data
     :param X: data np.array
-    :param X_factor: general multiplication factor
     :param X_real_min: real minimum
     :param X_real_max: real maximum
     :return: weights
     """
-
-    weights = np.ones(len(X)) * X_factor
+    weights = np.ones(len(X))
     for n, x, in enumerate(X):
-        if x > X_real_min & x < X_real_max:
+        if x > X_real_min and x < X_real_max:
             weights[n] = weights[n] * 2
     return weights
 
 
-def make_weights_array(X, weights_factors, weights_pol_ranges):
+def make_weights_array(X, weights_pol_ranges):
     weights = []
-    for n in range(0, len(X[0])):
-        for k in ['target', 'temp', 'rh']:
-            weights.append(weight_array(X[:, n],
-                                  weights_factors[k],
-                                  weights_pol_ranges[k + '_real_min'],
-                                  weights_pol_ranges[k + '_real_max']))
+    var_names = ['target', 'temp', 'rh']
+    for n, k in enumerate(var_names):
+        weights.append(weight_array(X[:, n],
+                                    weights_pol_ranges[k + '_real_min'],
+                                    weights_pol_ranges[k + '_real_max']))
     weights = np.array(weights).reshape(X.shape)
-    return weights
+    weights_1d = np.ones(len(weights))
+    for n in range(0, len(weights)):
+        weights_1d[n] = weights[n].mean()
+    return weights_1d
 
 
-
-
-def apply_poly_ridge(X, y, degree, alpha, weights):
+def apply_poly_ridge(X, y, degree, alpha, weights_params='none'):
     poly_features = PolynomialFeatures(degree=degree, include_bias=False)
     X_poly = poly_features.fit_transform(X)
     scaler = StandardScaler().fit(X_poly)
@@ -180,9 +178,10 @@ def apply_poly_ridge(X, y, degree, alpha, weights):
 
     reg = linear_model.Ridge(alpha=alpha)
 
-    if weights_param == 'none':
+    if weights_params == 'none':
         reg.fit(X_poly_scaled, y)
     else:
+        weights = make_weights_array(X, weights_params)
         reg.fit(X_poly_scaled, y, weights)
 
     return_dict = {'coef': reg.coef_,
@@ -218,12 +217,12 @@ def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs)
     return params_dict
 
 
-def get_ridge_parameters(da, alpha, degree, targets, save=False):
+def get_ridge_parameters(da, alpha, degree, targets, weights_params, save=False):
     regression_params = {}
     for target in targets:
         y = da.sel(station='Ref', variable=target)
         X = da.drop_sel(station='Ref').sel(variable=[target, 'rh', 'temp'])
-        regression_params[target] = apply_model_on_dimensions(X, y, degree=degree[target], alpha=alpha[target])
+        regression_params[target] = apply_model_on_dimensions(X, y, degree=degree[target], alpha=alpha[target], weights_params=weights_params)
 
     if save:
         with open(OUTPUT_DIR + LCS + 'calibration_parameters.json', 'w') as fp:
@@ -640,26 +639,23 @@ if __name__ == '__main__':
 
     if calibrate_stations:
         # make parameters json
-        alpha = {'pm10': 20,
-                 'pm25': 10,
-                 'pm1': 20}
+        alpha = {'pm10': 50,
+                 'pm25': 50,
+                 'pm1': 50}
         degree = {'pm10': 3,
                   'pm25': 3,
                   'pm1': 3}
         targets = ['pm10', 'pm25', 'pm1']
-        weights = {'target': 1,
-                   'temp': 0.5,
-                   'rh': 0.1}
-        weights_pol_range = {'target_real_min': 0,
-                            'target_real_max': 15,
-                            'temp_real_min': 0,
-                            'temp_real_max': 20,
-                            'rh_real_min': 0,
-                            'rh_real_max': 100}
+        weights_ranges = {'target_real_min': 0,
+                          'target_real_max': 15,
+                          'temp_real_min': 0,
+                          'temp_real_max': 20,
+                          'rh_real_min': 0,
+                          'rh_real_max': 100}
 
-        calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, save=True)
+        calibration_params = get_ridge_parameters(calibration_data, alpha, degree, targets, weights_ranges, save=True)
         pm_calibrated = make_calibration(data, calibration_params, output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
-        a = 1
+
