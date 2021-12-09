@@ -1,0 +1,55 @@
+---
+title: "Woking Greens Report"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(openair)
+
+DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
+OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
+LCS = 'WokingNetwork/'
+
+df = read_csv(paste0(OUTPUT_DIR, LCS, 'data_calibrated.csv')) %>%
+  mutate(date=time, site=station)
+
+summary(df)
+
+timevar_cal <- df %>%
+  timeVariation(pol = c("pm1_cal", "pm25_cal", "pm10_cal"), type = "station")
+
+timevar <- df %>%
+  timeVariation(pol = c("pm1", "pm25", "pm10"), type = "station")
+```
+
+```{r, fig.height=10, fig.width=15}
+plot(timevar_cal, subset = "hour")
+```
+
+```{r, fig.height=10, fig.width=15}
+plot(timevar, subset = "day.hour")
+```
+
+
+```{r, fig.height=20}
+df %>%
+  filter(station %in% c("WokingGreens#1", "WokingGreens#2", "WokingGreens#3", "WokingGreens#4")) %>%
+  select(station, pm1, pm1_cal, date) %>%
+  summaryPlot(period = "months")
+df %>%
+  filter(station %in% c("WokingGreens#5", "WokingGreens#6", "WokingGreens#7", "WokingGreens#8")) %>%
+  summaryPlot(pol = c("pm1_cal"),
+              period = "months")
+
+df %>%
+  ggplot()+
+  geom_point(aes(x=time, y=pm1_cal))+
+  ylim(NA, 0)
+
+hist(df$pm1_cal)
+
+sum(df$pm1_cal < 0, na.rm = T)/length(df$pm1_cal)
+```
+
