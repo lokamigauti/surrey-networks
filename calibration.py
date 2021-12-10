@@ -207,13 +207,13 @@ def make_weights_array(X, weights_pol_ranges):
     return weights_1d
 
 
-def apply_poly_ridge(X, y, degree, alpha, weights_params='none', weights_array=np.nan, fit_intercept=True):
+def apply_poly_ridge(X, y, degree, alpha, weights_params='none', weights_array=np.nan, **kwargs):
     poly_features = PolynomialFeatures(degree=degree, include_bias=False)
     X_poly = poly_features.fit_transform(X)
     scaler = StandardScaler().fit(X_poly)
     X_poly_scaled = scaler.transform(X_poly)
 
-    reg = linear_model.Ridge(alpha=alpha, fit_intercept=fit_intercept)
+    reg = linear_model.Ridge(alpha=alpha, **kwargs)
 
     if not weights_params == 'none':
         weights = make_weights_array(X, weights_params)
@@ -284,7 +284,7 @@ def calibrate(station_outputs, params):
         y = np.zeros(len(station_outputs[:, 0]))
         station_outputs_length = len(station_outputs)
 
-    poly_features = PolynomialFeatures(degree=params['poly_degree'])
+    poly_features = PolynomialFeatures(degree=params['poly_degree'], include_bias=False)
     for n in range(0, station_outputs_length):
         if np.any(np.isnan(station_outputs[n])):
             y[n] = np.nan
@@ -333,7 +333,8 @@ def make_calibration(data, calibration_params, targets=['pm10', 'pm25', 'pm1'], 
     da_calibrated = data.copy().rename('calibrated')
     cal_list = []
     for target in targets:
-        cal = da_calibrated.groupby('station').map(calibrator, args=(target, calibration_params, **calibratekwargs)).copy().rename('case')
+        cal = da_calibrated.groupby('station')
+        cal = cal.map(calibrator, args=(target, calibration_params), **calibratekwargs).copy().rename('case')
         cal_list.append(cal)
     da_calibrated = xr.concat(cal_list, dim='variable')
     if not output_path == 'none':
@@ -424,9 +425,9 @@ if __name__ == '__main__':
         data = data.combine_first(pm_calibrated)
 
     if characterise_cal or calibrate_stations:
-        alpha = {'pm25_10': 10,
-                 'pm1_25': 20,
-                 'pm1': 10}
+        alpha = {'pm25_10': 0.5,
+                 'pm1_25': 0.5,
+                 'pm1': 0.5}
         degree = {'pm25_10': 3,
                   'pm1_25': 3,
                   'pm1': 3}
@@ -436,7 +437,7 @@ if __name__ == '__main__':
         weights_array = [1 if concentration < 15 else 0.5 for concentration in pm10]
 
         calibration_params = get_ridge_parameters(calibration_chamber_data, alpha, degree, targets, save=True,
-                                                  weights_array=weights_array, fit_intercept=False)
+                                                  weights_array=weights_array)
 
     if calibrate_stations:
         # make parameters json
