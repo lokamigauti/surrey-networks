@@ -139,6 +139,12 @@ def calibration_data_import(path):
     da = ds.to_array()
     da = da.transpose('time', 'station', 'variable')
 
+    da = separate_pm_modes(da)
+
+    return da
+
+def separate_pm_modes(da):
+    da = da.copy()
     da_pm1_25 = da.sel(variable='pm25') - da.sel(variable='pm1')
     da_pm1_25 = da_pm1_25.assign_coords(variable='pm1_25').expand_dims(dim='variable')
     da = xr.concat([da, da_pm1_25], dim='variable')
@@ -146,7 +152,6 @@ def calibration_data_import(path):
     da_pm25_10 = da.sel(variable='pm10') - da.sel(variable='pm25')
     da_pm25_10 = da_pm25_10.assign_coords(variable='pm25_10').expand_dims(dim='variable')
     da = xr.concat([da, da_pm25_10], dim='variable')
-
     return da
 
 
@@ -179,7 +184,7 @@ def make_weights_array(X, weights_pol_ranges):
     return weights_1d
 
 
-def apply_poly_ridge(X, y, degree, alpha, weights_params='none'):
+def apply_poly_ridge(X, y, degree, alpha, weights_params='none', weights_array=np.nan):
     poly_features = PolynomialFeatures(degree=degree, include_bias=False)
     X_poly = poly_features.fit_transform(X)
     scaler = StandardScaler().fit(X_poly)
@@ -187,11 +192,14 @@ def apply_poly_ridge(X, y, degree, alpha, weights_params='none'):
 
     reg = linear_model.Ridge(alpha=alpha)
 
-    if weights_params == 'none':
-        reg.fit(X_poly_scaled, y)
-    else:
+    if not weights_params == 'none':
         weights = make_weights_array(X, weights_params)
         reg.fit(X_poly_scaled, y, weights)
+    elif not weights_array == np.nan:
+            weights = weights_array
+            reg.fit(X_poly_scaled, y, weights)
+    else:
+        reg.fit(X_poly_scaled, y)
 
     return_dict = {'coef': reg.coef_,
                    'intercept': reg.intercept_,
@@ -226,12 +234,13 @@ def apply_model_on_dimensions(X, y, model_dims=['station'], **regression_kwargs)
     return params_dict
 
 
-def get_ridge_parameters(da, alpha, degree, targets, weights_params, save=False):
+def get_ridge_parameters(da, alpha, degree, targets, save=False, **apply_model_on_dimensions_kwargs):
     regression_params = {}
     for target in targets:
         y = da.sel(station='Ref', variable=target)
         X = da.drop_sel(station='Ref').sel(variable=[target, 'rh', 'temp'])
-        regression_params[target] = apply_model_on_dimensions(X, y, degree=degree[target], alpha=alpha[target], weights_params=weights_params)
+        regression_params[target] = apply_model_on_dimensions(X, y, degree=degree[target], alpha=alpha[target],
+                                                              **apply_model_on_dimensions_kwargs)
 
     if save:
         with open(OUTPUT_DIR + LCS + 'calibration_parameters.json', 'w') as fp:
@@ -297,12 +306,11 @@ def calibrator(data, target, calibration_params):
     return da
 
 
-def make_calibration(data, calibration_params, output_path='none'):
+def make_calibration(data, calibration_params, targets=['pm10', 'pm25', 'pm1'], output_path='none'):
     da_calibrated = data.copy().rename('calibrated')
-    pms = ['pm10', 'pm25', 'pm1']
     cal_list = []
-    for pm in pms:
-        cal = da_calibrated.groupby('station').map(calibrator, args=(pm, calibration_params)).copy().rename('case')
+    for target in targets:
+        cal = da_calibrated.groupby('station').map(calibrator, args=(target, calibration_params)).copy().rename('case')
         cal_list.append(cal)
     da_calibrated = xr.concat(cal_list, dim='variable')
     if not output_path == 'none':
@@ -367,15 +375,16 @@ def flatten_data(da, sample_dim='time', feature_dim='variable', output_path='non
 
 
 if __name__ == '__main__':
-    characterise_cal = True
+    characterise_cal = False
     find_hyperparameters = False
-    calibrate_stations = False
+    calibrate_stations = True
 
     # load data
     calibration_data_path = DATA_DIR + LCS + 'calibration_std.csv'
     calibration_chamber_data = calibration_data_import(calibration_data_path)
     station_data_path = DATA_DIR + 'Imported/lcs.nc'
     data = xr.open_dataarray(station_data_path)
+    data = separate_pm_modes(data)
 
     if not calibrate_stations:
         ridge_parameters_path = OUTPUT_DIR + LCS + 'calibration_parameters.json'
@@ -456,7 +465,8 @@ if __name__ == '__main__':
         r2_pearson.groupby('variable').mean(dim='station')
         r2_pearson.groupby('variable').std(dim='station')
 
-        r2_precal = LeoMetrics('r2').apply(calibration_chamber_data, calibration_chamber_data.sel(station='Ref').drop('station'))
+        r2_precal = LeoMetrics('r2').apply(calibration_chamber_data, calibration_chamber_data.sel(station='Ref')
+                                           .drop('station'))
         sns.heatmap(r2_precal.to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
@@ -468,7 +478,8 @@ if __name__ == '__main__':
         r2_precal.groupby('variable').mean(dim='station')
         r2_precal.groupby('variable').std(dim='station')
 
-        rmse_precal = LeoMetrics('mse').apply(calibration_chamber_data, calibration_chamber_data.sel(station='Ref').drop('station')) ** 0.5
+        rmse_precal = LeoMetrics('mse').apply(calibration_chamber_data, calibration_chamber_data.sel(station='Ref')
+                                              .drop('station')) ** 0.5
         sns.heatmap(rmse_precal.to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
@@ -480,7 +491,8 @@ if __name__ == '__main__':
         rmse_precal.groupby('variable').mean(dim='station')
         rmse_precal.groupby('variable').std(dim='station')
 
-        mape_precal = LeoMetrics('mape').apply(calibration_chamber_data, calibration_chamber_data.sel(station='Ref').drop('station'))
+        mape_precal = LeoMetrics('mape').apply(calibration_chamber_data, calibration_chamber_data.sel(station='Ref')
+                                               .drop('station'))
         sns.heatmap(mape_precal.to_pandas().drop('Ref')
                     , annot=True
                     , cmap='viridis'
@@ -507,7 +519,8 @@ if __name__ == '__main__':
                           'rh_real_min': 0,
                           'rh_real_max': 100}
         targets = ['pm10', 'pm25', 'pm1']
-        calibration_params = get_ridge_parameters(calibration_chamber_data, alpha, degree, targets, weights_ranges, save=True)
+        calibration_params = get_ridge_parameters(calibration_chamber_data, alpha, degree, targets, weights_ranges,
+                                                  save=True)
         chamber_calibration = make_calibration(calibration_chamber_data.drop_sel(station='Ref'), calibration_params)
         chamber_calibration = chamber_calibration.combine_first(calibration_chamber_data)
 
@@ -685,15 +698,18 @@ if __name__ == '__main__':
                   'pm1_25': 3,
                   'pm1': 3}
         targets = ['pm25_10', 'pm1_25', 'pm1']
-        weights_ranges = {'target_real_min': 0,
-                          'target_real_max': 15,
-                          'temp_real_min': 0,
-                          'temp_real_max': 20,
-                          'rh_real_min': 0,
-                          'rh_real_max': 100}
+        # weights_ranges = {'target_real_min': 0,
+        #                   'target_real_max': 15,
+        #                   'temp_real_min': 0,
+        #                   'temp_real_max': 20,
+        #                   'rh_real_min': 0,
+        #                   'rh_real_max': 100}
+        pm10 = calibration_chamber_data.sel(variable='pm10', station='Ref').values
+        weights_array = [1 if concentration < 15 else 0.5 for concentration in pm10]
 
-        calibration_params = get_ridge_parameters(calibration_chamber_data, alpha, degree, targets, weights_ranges, save=True)
-        pm_calibrated = make_calibration(data, calibration_params, output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
+        calibration_params = get_ridge_parameters(calibration_chamber_data, alpha, degree, targets,
+                                                  weights_array=weights_array, save=True)
+        pm_calibrated = make_calibration(data, calibration_params, targets=targets, output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
