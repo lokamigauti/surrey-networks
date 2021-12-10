@@ -138,6 +138,15 @@ def calibration_data_import(path):
     ds.to_netcdf(DATA_DIR + 'Imported/calibration.nc')
     da = ds.to_array()
     da = da.transpose('time', 'station', 'variable')
+
+    da_pm1_25 = da.sel(variable='pm25') - da.sel(variable='pm1')
+    da_pm1_25 = da_pm1_25.assign_coords(variable='pm1_25').expand_dims(dim='variable')
+    da = xr.concat([da, da_pm1_25], dim='variable')
+
+    da_pm25_10 = da.sel(variable='pm10') - da.sel(variable='pm25')
+    da_pm25_10 = da_pm25_10.assign_coords(variable='pm25_10').expand_dims(dim='variable')
+    da = xr.concat([da, da_pm25_10], dim='variable')
+
     return da
 
 
@@ -367,18 +376,6 @@ if __name__ == '__main__':
     calibration_chamber_data = calibration_data_import(calibration_data_path)
     station_data_path = DATA_DIR + 'Imported/lcs.nc'
     data = xr.open_dataarray(station_data_path)
-
-    calibration_chamber_pm1_25 = calibration_chamber_data.sel(variable='pm25') \
-                                 - calibration_chamber_data.sel(variable='pm1')
-    calibration_chamber_pm1_25 = calibration_chamber_pm1_25.assign_coords(variable='pm1_25').expand_dims(dim='variable')
-    calibration_chamber_data = xr.concat([calibration_chamber_data, calibration_chamber_pm1_25], dim='variable')
-
-    calibration_chamber_pm25_10 = calibration_chamber_data.sel(variable='pm10') \
-                                 - calibration_chamber_data.sel(variable='pm25')
-    calibration_chamber_pm25_10 = calibration_chamber_pm25_10.assign_coords(variable='pm25_10').expand_dims(dim='variable')
-    calibration_chamber_data = xr.concat([calibration_chamber_data, calibration_chamber_pm25_10], dim='variable')
-
-
 
     if not calibrate_stations:
         ridge_parameters_path = OUTPUT_DIR + LCS + 'calibration_parameters.json'
@@ -681,13 +678,13 @@ if __name__ == '__main__':
 
     if calibrate_stations:
         # make parameters json
-        alpha = {'pm10': 50,
-                 'pm25': 20,
+        alpha = {'pm25_10': 50,
+                 'pm1_25': 20,
                  'pm1': 10}
-        degree = {'pm10': 3,
-                  'pm25': 3,
+        degree = {'pm25_10': 3,
+                  'pm1_25': 3,
                   'pm1': 3}
-        targets = ['pm10', 'pm25', 'pm1']
+        targets = ['pm25_10', 'pm1_25', 'pm1']
         weights_ranges = {'target_real_min': 0,
                           'target_real_max': 15,
                           'temp_real_min': 0,
