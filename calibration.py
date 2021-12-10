@@ -161,19 +161,19 @@ def separate_pm_modes(da, drop=False):
     return da
 
 
-def combine_pm_modes(da, drop=False):
+def combine_pm_modes(da, suffix='_cal', drop=False):
     da = da.copy()
 
-    da_pm25 = da.sel(variable='pm1') + da.sel(variable='pm1_25')
-    da_pm25 = da_pm25.assign_coords(variable='pm25').expand_dims(dim='variable')
+    da_pm25 = da.sel(variable='pm1'+suffix) + da.sel(variable='pm1_25'+suffix)
+    da_pm25 = da_pm25.assign_coords(variable='pm25'+suffix).expand_dims(dim='variable')
     da = xr.concat([da, da_pm25], dim='variable')
 
-    da_pm10 = da.sel(variable='pm25') + da.sel(variable='pm25_10')
-    da_pm10 = da_pm10.assign_coords(variable='pm10').expand_dims(dim='variable')
+    da_pm10 = da.sel(variable='pm25'+suffix) + da.sel(variable='pm25_10'+suffix)
+    da_pm10 = da_pm10.assign_coords(variable='pm10'+suffix).expand_dims(dim='variable')
     da = xr.concat([da, da_pm10], dim='variable')
 
     if drop:
-        da = da.drop_sel(variables=['pm1_25', 'pm25_10'])
+        da = da.drop_sel(variable=['pm1_25'+suffix, 'pm25_10'+suffix])
 
     return da
 
@@ -734,6 +734,7 @@ if __name__ == '__main__':
                                                   weights_array=weights_array, save=True)
         pm_calibrated = make_calibration(data, calibration_params, targets=targets,
                                          output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
+        combine_pm_modes(pm_calibrated, drop=True)
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
