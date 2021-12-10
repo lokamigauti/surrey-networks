@@ -143,8 +143,10 @@ def calibration_data_import(path):
 
     return da
 
-def separate_pm_modes(da):
+
+def separate_pm_modes(da, drop=False):
     da = da.copy()
+
     da_pm1_25 = da.sel(variable='pm25') - da.sel(variable='pm1')
     da_pm1_25 = da_pm1_25.assign_coords(variable='pm1_25').expand_dims(dim='variable')
     da = xr.concat([da, da_pm1_25], dim='variable')
@@ -152,6 +154,27 @@ def separate_pm_modes(da):
     da_pm25_10 = da.sel(variable='pm10') - da.sel(variable='pm25')
     da_pm25_10 = da_pm25_10.assign_coords(variable='pm25_10').expand_dims(dim='variable')
     da = xr.concat([da, da_pm25_10], dim='variable')
+
+    if drop:
+        da = da.drop_sel(variables=['pm25', 'pm10'])
+
+    return da
+
+
+def combine_pm_modes(da, drop=False):
+    da = da.copy()
+
+    da_pm25 = da.sel(variable='pm1') + da.sel(variable='pm1_25')
+    da_pm25 = da_pm25.assign_coords(variable='pm25').expand_dims(dim='variable')
+    da = xr.concat([da, da_pm25], dim='variable')
+
+    da_pm10 = da.sel(variable='pm25') + da.sel(variable='pm25_10')
+    da_pm10 = da_pm10.assign_coords(variable='pm10').expand_dims(dim='variable')
+    da = xr.concat([da, da_pm10], dim='variable')
+
+    if drop:
+        da = da.drop_sel(variables=['pm1_25', 'pm25_10'])
+
     return da
 
 
@@ -196,8 +219,8 @@ def apply_poly_ridge(X, y, degree, alpha, weights_params='none', weights_array=n
         weights = make_weights_array(X, weights_params)
         reg.fit(X_poly_scaled, y, weights)
     elif not weights_array == np.nan:
-            weights = weights_array
-            reg.fit(X_poly_scaled, y, weights)
+        weights = weights_array
+        reg.fit(X_poly_scaled, y, weights)
     else:
         reg.fit(X_poly_scaled, y)
 
@@ -301,7 +324,7 @@ def calibrator(data, target, calibration_params):
         X = X.transpose()
     y = calibrate(X, calibration_params[target][station_]).copy()
     da = xr.DataArray(y.reshape(-1, 1),
-        coords=[('time', data.time.values.copy()), ('variable', [target + '_cal'])])
+                      coords=[('time', data.time.values.copy()), ('variable', [target + '_cal'])])
     da = da.astype('float32')
     return da
 
@@ -547,7 +570,7 @@ if __name__ == '__main__':
                   '']
         date_form = DateFormatter("%H:%M")
         g = chamber_calibration.reindex(variable=['pm1_cal', 'pm25_cal', 'pm10_cal']
-                       , station=stations) \
+                                        , station=stations) \
             .plot.line(x='time'
                        , row='variable'
                        , col_wrap=2
@@ -606,7 +629,7 @@ if __name__ == '__main__':
                 axs[1].scatter(da_ref_.values, da_others_uncal.sel(station=station).values)
             axs[0].plot([0, 175], [0, 175], color='k', linestyle='dashed')
             axs[1].plot([0, 175], [0, 175], color='k', linestyle='dashed')
-            axs[1].legend(['1:1']+da_others.station.values.tolist())
+            axs[1].legend(['1:1'] + da_others.station.values.tolist())
             axs[0].set_ylabel('Observ. concentration')
             axs[0].set_xlabel('Ref. concentration')
             axs[1].set_xlabel('Ref. concentration')
@@ -709,8 +732,8 @@ if __name__ == '__main__':
 
         calibration_params = get_ridge_parameters(calibration_chamber_data, alpha, degree, targets,
                                                   weights_array=weights_array, save=True)
-        pm_calibrated = make_calibration(data, calibration_params, targets=targets, output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
+        pm_calibrated = make_calibration(data, calibration_params, targets=targets,
+                                         output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
-
