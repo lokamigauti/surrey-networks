@@ -24,6 +24,10 @@ OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
 LCS = 'WokingNetwork/'
 plt.style.use('bmh')
 
+import winsound
+duration = 1000  # milliseconds
+freq = 440  # Hz
+
 class LeoMetrics:
     metrics_dict = {
         'r2': r2_score,
@@ -406,9 +410,9 @@ def abline(slope, intercept, ax):
 
 
 if __name__ == '__main__':
-    characterise_cal = True
+    characterise_cal = False
     find_hyperparameters = False
-    calibrate_stations = False
+    calibrate_stations = True
 
     # load data
     calibration_data_path = DATA_DIR + LCS + 'calibration_std.csv'
@@ -425,16 +429,16 @@ if __name__ == '__main__':
         data = data.combine_first(pm_calibrated)
 
     if characterise_cal or calibrate_stations:
-        alpha = {'pm25_10': 0.5,
-                 'pm1_25': 0.5,
-                 'pm1': 0.5}
+        alpha = {'pm25_10': 1*1E0,
+                 'pm1_25': 1*1E0,
+                 'pm1': 1*1E0}
         degree = {'pm25_10': 3,
                   'pm1_25': 3,
                   'pm1': 3}
         targets = ['pm25_10', 'pm1_25', 'pm1']
 
-        pm10 = calibration_chamber_data.sel(variable='pm10', station='Ref').values
-        weights_array = [1 if concentration < 15 else 0.5 for concentration in pm10]
+        pm = calibration_chamber_data.sel(variable='pm25_10', station='Ref').values
+        weights_array = [1 if concentration < 2 else 0.4 for concentration in pm]
 
         calibration_params = get_ridge_parameters(calibration_chamber_data, alpha, degree, targets, save=True,
                                                   weights_array=weights_array)
@@ -751,3 +755,6 @@ if __name__ == '__main__':
         degree = 3
         coef, intercept = test_ridge_poly(X_train, y_train, X_test, y_test, alpha, degree, plot=True)
         coef, intercept = test_ridge_poly(X, y, X, y, alpha, degree, plot=True)
+
+    print('End of execution')
+    winsound.Beep(freq, duration)
