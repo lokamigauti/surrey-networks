@@ -1,10 +1,11 @@
 import numpy as np
 import xarray as xr
 import pandas as pd
+import tools
 import glob
 import re
 from io import StringIO
-from copy import deepcopy
+
 from datetime import datetime
 
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
@@ -34,30 +35,9 @@ def make_da(filepaths):
         da = da.expand_dims(dim='station')
         da_list.append(da)
     da = xr.concat(da_list, dim='station')
-    da_clear = convert_to_float_and_replace_nan(da, deep_copy=True)
+    da_clear = tools.convert_to_float_and_replace_nan(da, deep_copy=True)
     da_clear.to_netcdf(DATA_DIR + 'Imported/lcs.nc')
     return da_clear
-
-
-def convert_to_float_and_replace_nan(da, deep_copy=False, precision=32):
-    if deep_copy:
-        da = da.copy()
-
-    data_temp = da.values.copy()
-
-    original_shape = deepcopy(data_temp.shape)
-
-    data_temp = data_temp.flatten()
-
-    for idx, value in enumerate(data_temp):
-        try:
-            data_temp[idx] = float(value)
-        except ValueError:
-            data_temp[idx] = np.nan
-    data_temp = data_temp.reshape(original_shape)
-    da = da.copy(data=data_temp)
-    da = da.astype(f'float{precision}')
-    return da
 
 
 if __name__ == '__main__':
