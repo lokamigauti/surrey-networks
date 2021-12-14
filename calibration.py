@@ -1,3 +1,5 @@
+import tools
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -380,28 +382,6 @@ def cross_corr(da, station, reference, variable, dt, mode='full', method='auto',
     return lag
 
 
-def flatten_data(da, sample_dim='time', feature_dim='variable', output_path='none'):
-    """
-    Transform DataArray into a flat DataFrame. Saves a file if output_dir is provided.
-    :param da: 3D+DataArray
-    :param sample_dim: String with name of sample dimension
-    :param feature_dim: String with name of feature dimension
-    :param output_path: String with output path
-    :return: Simple-index DataFrame
-    """
-    dims_to_features = set(da.dims) - {sample_dim, feature_dim}
-    dims_to_features = np.array(tuple(dims_to_features))
-    df = da.stack(station_variable=np.append(dims_to_features, feature_dim)).to_pandas()
-    df = df.reset_index().melt(id_vars=sample_dim)
-    df = df.pivot_table(index=np.append(sample_dim, dims_to_features).tolist()
-                        , columns=[feature_dim]
-                        , values=['value'])
-    df = df.droplevel(0, axis=1).reset_index(level=dims_to_features)
-    if not output_path == 'none':
-        df.to_csv(output_path)
-    return df
-
-
 def abline(slope, intercept, ax):
     """Plot a line from slope and intercept"""
     x_vals = np.array(ax.get_xlim())
@@ -429,9 +409,9 @@ if __name__ == '__main__':
         data = data.combine_first(pm_calibrated)
 
     if characterise_cal or calibrate_stations:
-        alpha = {'pm25_10': 1*1E0,
-                 'pm1_25': 1*1E0,
-                 'pm1': 1*1E0}
+        alpha = {'pm25_10': 2*1E1,
+                 'pm1_25': 2*1E1,
+                 'pm1': 2*1E1}
         degree = {'pm25_10': 3,
                   'pm1_25': 3,
                   'pm1': 3}
@@ -450,7 +430,7 @@ if __name__ == '__main__':
         pm_calibrated = combine_pm_modes(pm_calibrated, drop=False)
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
-        flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
+        tools.flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
 
     if characterise_cal:
 
