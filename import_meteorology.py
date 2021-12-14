@@ -5,8 +5,9 @@ import glob
 from datetime import datetime
 
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
-
+OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
 METEOROLOGY = 'Heathrow/'
+LCS = 'WokingNetwork/'
 
 
 def make_da(filepaths):
@@ -22,7 +23,7 @@ def make_da(filepaths):
     da = xr.concat(da_list, dim='time')
     da_clear = tools.convert_to_float_and_replace_nan(da, deep_copy=True)
     da_clear.to_netcdf(DATA_DIR + 'Imported/meteorology.nc')
-    da_clear.transpose().to_pandas().to_csv(DATA_DIR + 'Imported/meteorology.csv')
+    da_clear.transpose().to_pandas().to_csv(OUTPUT_DIR + LCS + 'meteorology.csv')
     return da_clear
 
 
