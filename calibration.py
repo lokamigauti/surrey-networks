@@ -167,8 +167,16 @@ def separate_pm_modes(da, drop=False):
     return da
 
 
-def combine_pm_modes(da, suffix='_cal', drop=False):
+def combine_pm_modes(da, suffix='_cal', drop=False, force_positive=False):
     da = da.copy()
+
+    if force_positive:
+        da.loc[dict(variable='pm1' + suffix)] = xr.where(da.loc[dict(variable='pm1' + suffix)] < 0, 0,
+                                                         da.loc[dict(variable='pm1' + suffix)])
+        da.loc[dict(variable='pm1_25' + suffix)] = xr.where(da.loc[dict(variable='pm1_25' + suffix)] < 0, 0,
+                                                         da.loc[dict(variable='pm1_25' + suffix)])
+        da.loc[dict(variable='pm25_10' + suffix)] = xr.where(da.loc[dict(variable='pm25_10' + suffix)] < 0, 0,
+                                                         da.loc[dict(variable='pm25_10' + suffix)])
 
     da_pm25 = da.sel(variable='pm1' + suffix) + da.sel(variable='pm1_25' + suffix)
     da_pm25 = da_pm25.assign_coords(variable='pm25' + suffix).expand_dims(dim='variable')
@@ -427,7 +435,7 @@ if __name__ == '__main__':
         # make parameters json
         pm_calibrated = make_calibration(data, calibration_params, targets=targets,
                                          output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
-        pm_calibrated = combine_pm_modes(pm_calibrated, drop=False)
+        pm_calibrated = combine_pm_modes(pm_calibrated, drop=False, force_positive=True)
         data = data.combine_first(pm_calibrated)
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         tools.flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)
@@ -551,7 +559,7 @@ if __name__ == '__main__':
         if plot_calibration:
             chamber_calibration = make_calibration(calibration_chamber_data.drop_sel(station='Ref'), calibration_params,
                                                    targets=targets)
-            chamber_calibration = combine_pm_modes(chamber_calibration, drop=False)
+            chamber_calibration = combine_pm_modes(chamber_calibration, drop=False, force_positive=True)
             chamber_calibration = chamber_calibration.combine_first(calibration_chamber_data)
             chamber_calibration.loc[dict(station='Ref', variable=['pm1_cal', 'pm25_cal', 'pm10_cal',
                                                                   'pm1_25_cal', 'pm25_10_cal'])] \
