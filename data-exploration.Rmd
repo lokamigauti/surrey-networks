@@ -68,8 +68,11 @@ append_file <- function(data,
 
 data <- data %>% append_file(filepaths)
   
+# timevar <- data %>%
+#   timeVariation(pol = c("pm1","pm25","pm10"), type = "site")
+
 timevar <- data %>%
-  timeVariation(pol = c("pm1","pm25","pm10"), type = "site")
+  timeVariation(pol = c("aqi"), type = "site")
 ```
 
 # Summary
@@ -153,6 +156,15 @@ for(sitenumber in c("Station 1", "Station 2", "Station 3", "Station 4", "Station
                type = "site",
                main = paste("AQI in ", sitenumber))
 }
+
+
+
+data %>%
+  group_by(date) %>%
+  summarise(aqi = mean(aqi, na.rm = T)) %>%
+calendarPlot(pol = c("aqi"),
+             annotate = "value",
+             main = paste("AQI"))
 
 ```
 
@@ -360,5 +372,11 @@ plot(timevar, subset = "day")
 
 ```{r, echo=FALSE}
 plot(timevar, subset = "month")
+```
+
+## stats
+
+```{r}
+
 ```
 
