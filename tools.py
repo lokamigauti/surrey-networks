@@ -22,7 +22,6 @@ def size_in_memory(da):
     print(f'Total array size is: {total_size} GB')
     return None
 
-
 def convert_to_float_and_replace_nan(da, deep_copy=False, precision=32):
     """
     Intended to use with imports
@@ -70,3 +69,17 @@ def flatten_data(da, sample_dim='time', feature_dim='variable', output_path='non
     if not output_path == 'none':
         df.to_csv(output_path)
     return df
+
+def resample(da, delta, upsampling=False, time_dim_name='time'):
+    """
+    Perform resample in a DataArray given the name of the time dim
+    :param da: xr.DataArray
+    :param delta: resampling interval
+    :param upsampling: Is the operation an Upsampling?
+    :param time_dim_name: Name of the time dimension. Labels need to be in datetime format.
+    :return: resampled DataArray
+    """
+    da.rename({time_dim_name: 'time'})
+    if upsampling:
+        return da.resample(time=delta, skipna=True, closed={"left", "right"}).interpolate('linear')
+    return da.resample(time=delta, skipna=True).mean()
