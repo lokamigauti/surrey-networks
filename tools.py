@@ -92,7 +92,7 @@ def stations_to_lat_lon(pm_path, meta_path, meta_station_col_name='Device/Sensor
     pm_coords = pm_meta[[meta_station_col_name, 'lat', 'lon']]. \
         rename(columns={meta_station_col_name: 'station'}).set_index('station')
     da_list = []
-    for time in range(pm.time.__len__())
+    for time in range(pm.time.__len__()):
         pm_pd = pm.isel(time=time).to_pandas()
         pm_pd = pd.concat([pm_pd, pm_coords], axis=1).reset_index().set_index(['lat', 'lon'])
         da = pm_pd.to_xarray()
