@@ -4,9 +4,10 @@ output: html_notebook
 ---
 
 
-```{r}
+```{r, fig.height=10, fig.width=15}
 library(tidyverse)
 library(openair)
+library(lubridate)
 
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
@@ -15,17 +16,51 @@ LCS = 'WokingNetwork/'
 df = read_csv(paste0(OUTPUT_DIR, LCS, 'data_calibrated.csv')) %>%
   mutate(date=time, site=station)
 
-summary(df)
+sum(df$pm1_cal < 0, na.rm = T)/length(df$pm1_cal)
 
 timevar_cal <- df %>%
   timeVariation(pol = c("pm1_cal", "pm25_cal", "pm10_cal"), type = "station")
 
-timevar <- df %>%
-  timeVariation(pol = c("pm1", "pm25", "pm10"), type = "station")
+plot(timevar_cal, subset = "hour")
+  
+# timevar <- df %>%
+#   timeVariation(pol = c("pm1", "pm25", "pm10"), type = "station")
+
+beepr::beep()
 ```
 
 ```{r, fig.height=10, fig.width=15}
-plot(timevar_cal, subset = "hour")
+for(station_ in unique(df$station)) {
+  print(station_)
+  df %>%
+    filter(station==station_) %>%
+    summary() %>%
+    print()
+}
+```
+```{r}
+df_hourly <- df %>%
+  mutate(date = floor_date(date, 'hour')) %>%
+  group_by(site, date) %>%
+  summarise(pm1 = mean(pm1_cal), pm25 = mean(pm25_cal), pm10 = mean(pm10_cal)) %>%
+  ungroup()
+
+for(site_ in unique(df_hourly$site)) {
+  print(site_)
+  df_hourly %>%
+    filter(site==site_) %>%
+    summary() %>%
+    print()
+}
+
+df_hourly %>%
+  summary
+
+df_hourly %>%
+  group_by(site) %>%
+  select(-site, -date) %>%
+  summarise(across(everything(), sd, na.rm = T, .names = "sd_{.col}"))
+
 ```
 
 ```{r, fig.height=10, fig.width=15}
