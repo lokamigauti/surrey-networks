@@ -60,13 +60,15 @@ if __name__ == '__main__':
     other_vars = xr.open_dataarray(DATA_DIR + 'Imported/lcs.nc')
     calibration_params = calibration.import_json_as_dict(OUTPUT_DIR + LCS + 'calibration_parameters.json')
     pm = xr.open_dataarray(OUTPUT_DIR + LCS + 'pm_calibrated.nc')
-    da = other_vars.combine_first(pm)
-    da.stack(station_variable=['station', 'variable']).to_pandas().to_csv(OUTPUT_DIR + LCS + 'data_calibrated.csv')
-    da_pandas = da.stack(station_variable=['station', 'variable']).to_pandas()
-    da_melt = da_pandas.reset_index().melt(id_vars='time')
-    da_melt2 = da_melt.pivot_table(index=['time', 'station'], columns=['variable'], values=['value'])
-    da_melt3 = da_melt2.droplevel(0, axis=1).reset_index(level='station')
-    da_melt3.to_csv(OUTPUT_DIR + LCS + 'data_calibrated.csv')
+
+    if flat_data:
+        da = other_vars.combine_first(pm)
+        da.stack(station_variable=['station', 'variable']).to_pandas().to_csv(OUTPUT_DIR + LCS + 'data_calibrated.csv')
+        da_pandas = da.stack(station_variable=['station', 'variable']).to_pandas()
+        da_melt = da_pandas.reset_index().melt(id_vars='time')
+        da_melt2 = da_melt.pivot_table(index=['time', 'station'], columns=['variable'], values=['value'])
+        da_melt3 = da_melt2.droplevel(0, axis=1).reset_index(level='station')
+        da_melt3.to_csv(OUTPUT_DIR + LCS + 'data_calibrated.csv')
 
 
     mean_pm_per_station = pm.stack(station_pm=('station', 'variable')).groupby('station_pm').mean('time')
