@@ -1,5 +1,7 @@
 import numpy as np
 from copy import deepcopy
+import xarray as xr
+import pandas as pd
 
 def size_in_memory(da):
     """
@@ -83,3 +85,19 @@ def resample(da, delta, upsampling=False, time_dim_name='time'):
     if upsampling:
         return da.resample(time=delta, skipna=True, closed={"left", "right"}).interpolate('linear')
     return da.resample(time=delta, skipna=True).mean()
+
+def stations_to_lat_lon(pm_path, meta_path, meta_station_col_name='Device/Sensor Name assigned', save=False, save_path=''):
+    pm = xr.open_dataarray(pm_path)
+    pm_meta = pd.read_csv(meta_path)
+    pm_coords = pm_meta[[meta_station_col_name, 'lat', 'lon']]. \
+        rename(columns={meta_station_col_name: 'station'}).set_index('station')
+    da_list = []
+    for time in range(pm.time.__len__())
+        pm_pd = pm.isel(time=time).to_pandas()
+        pm_pd = pd.concat([pm_pd, pm_coords], axis=1).reset_index().set_index(['lat', 'lon'])
+        da = pm_pd.to_xarray()
+        da_list.append(da)
+    p = xr.concat(da_list, dim='time')
+    if save:
+        p.to_netcdf(save_path)
+    return p
