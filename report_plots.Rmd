@@ -1,0 +1,336 @@
+---
+title: "Woking Greens Network Report 2"
+output: html_notebook
+---
+
+```{r, fig.height=10, fig.width=15}
+library(tidyverse)
+library(openair)
+library(lubridate)
+
+theme_set(theme_minimal())
+
+DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
+OUTPUT_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Output/'
+LCS = 'WokingNetwork/'
+
+meteorology <- read_csv(paste0(OUTPUT_DIR, LCS, 'meteorology.csv')) %>%
+  mutate(date=time, ws=wspd, wd=wdir)
+
+station_coordinates <- read_csv(paste0(DATA_DIR, LCS, 'Woking Green Party deatils.csv')) %>%
+  transmute(site = .$'Device/Sensor Name assigned',
+            latitude = lat,
+            longitude = lon)
+
+df <- read_csv(paste0(OUTPUT_DIR, LCS, 'data_calibrated.csv')) %>%
+  mutate(date=time, site=station)
+
+df <- df %>%
+  mutate(date = floor_date(date, 'hour')) %>%
+  group_by(site, date) %>%
+  summarise(pm1=mean(pm1_cal, na.rm=T),
+            pm25=mean(pm25_cal, na.rm=T),
+            pm10=mean(pm10_cal, na.rm=T),
+            pm1_25=mean(pm1_25_cal, na.rm=T),
+            pm25_10=mean(pm25_10_cal, na.rm=T)) %>%
+  ungroup()
+
+df <- df %>%
+  complete(date = seq(as.POSIXct(min(df$date)),
+                      as.POSIXct(max(df$date)),
+                      by='hour'),
+           site)
+df <- df %>%
+  left_join(meteorology, by='date')
+df <- df %>%
+  left_join(station_coordinates, by='site')
+
+timevar_cal <- df %>%
+  timeVariation(pol = c("pm1", "pm25", "pm10"), type = "site")
+
+beepr::beep()
+```
+
+Hourly statistics
+
+```{r}
+df %>%
+  group_by(site) %>%
+  summarise(pm1_mean = round(mean(pm1, na.rm=T), 2),
+            pm25_mean = round(mean(pm25, na.rm=T), 2),
+            pm10_mean = round(mean(pm10, na.rm=T), 2))
+df %>%
+  group_by(site) %>%
+  summarise(pm1_max = round(max(pm1, na.rm=T), 2),
+            pm25_max = round(max(pm25, na.rm=T), 2),
+            pm10_max = round(max(pm10, na.rm=T), 2))
+df %>%
+  group_by(site) %>%
+  summarise(pm1_min = round(min(pm1, na.rm=T), 2),
+            pm25_min = round(min(pm25, na.rm=T), 2),
+            pm10_min = round(min(pm10, na.rm=T), 2))
+df %>%
+  group_by(site) %>%
+  summarise(pm1_sd = round(sd(pm1, na.rm=T), 2),
+            pm25_sd = round(sd(pm25, na.rm=T), 2),
+            pm10_sd = round(sd(pm10, na.rm=T), 2))
+df %>%
+  group_by(site) %>%
+  summarise(pm1_q1 = round(quantile(pm1, probs=c(0.25), na.rm=T), 2),
+            pm25_q1 = round(quantile(pm25, probs=c(0.25), na.rm=T), 2),
+            pm10_q1 = round(quantile(pm10, probs=c(0.25), na.rm=T), 2))
+
+df %>%
+  group_by(site) %>%
+  summarise(pm1_q3 = round(quantile(pm1, probs=c(0.75), na.rm=T), 2),
+            pm25_q3 = round(quantile(pm25, probs=c(0.75), na.rm=T), 2),
+            pm10_q3 = round(quantile(pm10, probs=c(0.75), na.rm=T), 2))
+
+df %>%
+  summarise(pm1_mean = round(mean(pm1, na.rm=T), 2),
+            pm25_mean = round(mean(pm25, na.rm=T), 2),
+            pm10_mean = round(mean(pm10, na.rm=T), 2))
+df %>%
+  summarise(pm1_max = round(max(pm1, na.rm=T), 2),
+            pm25_max = round(max(pm25, na.rm=T), 2),
+            pm10_max = round(max(pm10, na.rm=T), 2))
+df %>%
+  summarise(pm1_min = round(min(pm1, na.rm=T), 2),
+            pm25_min = round(min(pm25, na.rm=T), 2),
+            pm10_min = round(min(pm10, na.rm=T), 2))
+df %>%
+  summarise(pm1_sd = round(sd(pm1, na.rm=T), 2),
+            pm25_sd = round(sd(pm25, na.rm=T), 2),
+            pm10_sd = round(sd(pm10, na.rm=T), 2))
+df %>%
+  summarise(pm1_q1 = round(quantile(pm1, probs=c(0.25), na.rm=T), 2),
+            pm25_q1 = round(quantile(pm25, probs=c(0.25), na.rm=T), 2),
+            pm10_q1 = round(quantile(pm10, probs=c(0.25), na.rm=T), 2))
+
+df %>%
+  summarise(pm1_q3 = round(quantile(pm1, probs=c(0.75), na.rm=T), 2),
+            pm25_q3 = round(quantile(pm25, probs=c(0.75), na.rm=T), 2),
+            pm10_q3 = round(quantile(pm10, probs=c(0.75), na.rm=T), 2))
+```
+
+
+Daily statistics
+
+```{r}
+daily <- df %>%
+  mutate(date = floor_date(date, 'day')) %>%
+  group_by(site, date) %>%
+  summarise(pm1=mean(pm1, na.rm=T),
+            pm25=mean(pm25, na.rm=T),
+            pm10=mean(pm10, na.rm=T),
+            prcp=mean(prcp, na.rm=T),
+            ws=mean(ws, na.rm=T),
+            wd=mean(wd, na.rm=T)) %>%
+  ungroup() %>%
+  group_by(site) %>%
+  complete(date = seq.Date(as.Date(min(df$date)),
+                           as.Date(max(df$date)),
+                           by='day'))
+pm25_limit = 15
+pm10_limit = 45
+daily %>%
+  ggplot(aes(x=date)) +
+  geom_hline(aes(yintercept=pm25_limit, colour='PM2.5'), linetype=2) +
+  geom_hline(aes(yintercept=pm10_limit, colour='PM10'), linetype=2) +
+  geom_line(aes(y=pm1, col='PM1')) +
+  geom_line(aes(y=pm25, col='PM2.5')) +
+  geom_line(aes(y=pm10, col='PM10')) +
+  xlab('Date') + ylab('Concentration (ug/m³)') +
+  facet_wrap(vars(site))
+ggsave(paste0(OUTPUT_DIR, LCS, 'pm_concentrations_over_time.png'), bg='white', width = 7, height = 7)
+
+daily %>%
+  group_by(site) %>%
+  summarise(pm10_who_daily = sum(pm10 > 45, na.rm=T),
+            pm25_who_daily = sum(pm25 > 15, na.rm=T),
+            pm10_who_annual = sum(pm10 > 15, na.rm=T),
+            pm25_who_annual = sum(pm25 > 5, na.rm=T),
+            pm10_uk_daily = sum(pm10 > 50, na.rm=T),
+            pm10_uk_annual = sum(pm10 > 40, na.rm=T),
+            pm25_uk_annual = sum(pm10 > 25, na.rm=T))
+
+daily %>%
+  group_by(site) %>%
+  summarise(pm10 = sum(!is.na(pm10)),
+            pm25 = sum(!is.na(pm25)))
+```
+
+```{r}
+daily_met <- meteorology %>%
+  mutate(date = floor_date(date, 'day')) %>%
+  group_by(date) %>%
+  summarise(prcp=mean(prcp, na.rm=T),
+            ws=mean(ws, na.rm=T),
+            wd=mean(wd, na.rm=T)) %>%
+  ungroup()
+
+daily %>%
+  select(-site) %>%
+  group_by(date) %>%
+  summarise(across(everything(), mean, na.rm=T)) %>%
+  mutate(PM10=pm10, 'Wind Direction' = wd, 'Wind Speed' = ws) %>%
+  pivot_longer(cols=c(PM10, 'Wind Direction', 'Wind Speed'), names_to="variable") %>%
+  ggplot(aes(x=date, y=value))+
+  geom_line() +
+  facet_wrap(vars(variable),
+             ncol=1,
+             scales = "free_y")+
+  xlab("Date") + ylab("")
+ggsave(paste0(OUTPUT_DIR, LCS, 'pm10_wd_comparison.png'), bg='white', width = 7, height = 5)
+
+```
+
+
+```{r,  fig.height=20, fig.width=20}
+df %>%
+  filter(site %in% c("WokingGreens#1")) %>%
+  summaryPlot(pol = c("pm10"),
+              period = "months")
+```
+
+```{r}
+library(openairmaps)
+polarMap(df,
+        pollutant = 'pm10',
+        latitude = "latitude",
+        longitude = "longitude",
+        type = "site")
+```
+
+
+```{r}
+plot(timevar_cal, subset = "hour")
+```
+
+```{r}
+df %>%
+  pollutionRose(pollutant='pm1')
+```
+
+```{r}
+png(paste0(OUTPUT_DIR, LCS, 'pm10_windrose.png'), width = 910, height = 1300)
+df %>%
+  windRose(type=c("pm10","site"), ws.int=5)
+dev.off()
+```
+
+```{r, fig.height=10, fig.width=15}
+polarAnnulus(df, poll = "pm10", period = "hour", main = "Hour", type = "site", col = "viridis")
+polarAnnulus(df, poll = "pm10", period = "weekday", main = "Weekday", type = "site", col = "viridis")
+```
+
+```{r, fig.height=10, fig.width=15}
+png(paste0(OUTPUT_DIR, LCS, 'pm25_polarplot.png'), width = 1900, height = 2000)
+polarPlot(df, pollutant = "pm25", 
+          key.position = "bottom",
+          key.header = "mean PM25 (ug/m3)", 
+          key.footer = NULL,
+          type = "site",
+          col = "magma",
+          min.bin = 5,
+          mis.col = "transparent",
+          angle.scale = 45,
+          units = "m/s",
+          layout = c(2, 4))
+dev.off()
+
+polarPlot(df, pollutant = "pm10", 
+          key.position = "bottom",
+          key.header = "mean PM10 (ug/m3)", 
+          key.footer = NULL,
+          type = "site",
+          col = "magma",
+          min.bin = 5,
+          mis.col = "transparent",
+          angle.scale = 45,
+          units = "m/s",
+          layout = c(2, 4))
+```
+
+```{r, fig.height=10, fig.width=15}
+for(a in seq(0, 9)){
+  polarPlot(df, type = "site", col = "viridis",
+          pollutant = "pm10", 
+          statistic = "cpf", 
+          percentile = c(a*10, (a+1)*10),
+          min.bin = 3)
+}
+df %>%
+  filter(site=="WokingGreens#4") %>%
+  mutate(percentile=case_when(
+    pm10 < quantile(pm10, .25, na.rm = T) ~
+      paste(round(quantile(pm10, 0, na.rm = T), 2),
+            round(quantile(pm10, .25, na.rm = T), 2),
+            sep="-"),
+    pm10 > quantile(pm10, .25, na.rm = T) & pm10 < quantile(pm10, .50, na.rm = T) ~
+       paste(round(quantile(pm10, .25, na.rm = T), 2),
+             round(quantile(pm10, .50, na.rm = T), 2),
+             sep="-"),
+    pm10 > quantile(pm10, .50, na.rm = T) & pm10 < quantile(pm10, .75, na.rm = T) ~
+       paste(round(quantile(pm10, .50, na.rm = T), 2),
+             round(quantile(pm10, .75, na.rm = T), 2),
+             sep="-"),
+    pm10 > quantile(pm10, .75, na.rm = T) & pm10 < quantile(pm10, 1, na.rm = T) ~
+       paste(round(quantile(pm10, .75, na.rm = T), 2),
+             round(quantile(pm10, 1, na.rm = T), 2),
+             sep="-"),
+  )) %>%
+  polarPlot(type = "percentile", col = "viridis",
+          pollutant = "pm10",
+          resolution = "normal",
+          normalise = T,
+          percentile = c(0,100))
+pm25_limit = 15
+pm10_limit = 45
+
+df %>%
+  mutate(infraction = case_when(
+    pm25 > pm25_limit * 2 ~ "D) 2x Above the limit",
+    pm25 > pm25_limit * 1.5 ~ "C) 1.5x Above the limit",
+    pm25 > pm25_limit ~ "B) 1x Above the limit",
+    pm25 < pm25_limit ~ "A) Below the limit",
+  )) %>%
+  polarPlot(type = c("infraction", "site"), col = "viridis",
+          pollutant = "pm25",
+          resolution = "normal",
+          normalise = F)
+
+df %>%
+  mutate(infraction = case_when(
+    pm25 > pm25_limit ~ "B) Above the limit",
+    pm25 < pm25_limit ~ "A) Below the limit",
+  )) %>%
+  polarPlot(type = c("infraction", "site"), col = "viridis",
+          pollutant = "pm25",
+          resolution = "normal",
+          normalise = F,
+          statistic = "cpf", 
+          percentile = c(80, 100))
+
+for(n in 1:8){
+  pm <- df %>%
+  filter(site==paste0("WokingGreens#", n)) %>%
+    pull(pm25)
+  
+  df %>%
+  filter(site==paste0("WokingGreens#", n)) %>%
+  polarPlot(type = c("site"), col = "magma",
+          pollutant = "pm25",
+          normalise = F,
+          statistic = "cpf", 
+          percentile = c(round(ecdf(pm)(pm25_limit)*100, 2), 100),
+          min.bin = 5,
+          mis.col = "transparent",
+          angle.scale = 45,
+          units = "m/s")
+}
+
+
+beepr::beep()
+```
+
