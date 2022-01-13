@@ -29,11 +29,11 @@ if __name__ == '__main__':
     pm_coords = pm_meta[['Device/Sensor Name assigned', 'lat', 'lon']]. \
         rename(columns={'Device/Sensor Name assigned': 'station'}).set_index('station')
 
-    pm_pd = pm.isel(time=30000).to_pandas()
+    pm_pd = pm.isel(time=31000).to_pandas()
     pm_pd = pd.concat([pm_pd, pm_coords], axis=1).reset_index().set_index(['lat', 'lon'])
 
-    lat_res = 15
-    lon_res = 30
+    lat_res = 150
+    lon_res = 300
 
     request = cimgt.Stamen(style='terrain')
     map_proj = request.crs
