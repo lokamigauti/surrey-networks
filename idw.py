@@ -46,19 +46,19 @@ if __name__ == '__main__':
     map_proj = request.crs
 
     district_bounds = ShapelyFeature(Reader(DATA_DIR + 'DistrictBoundaries/Local_Authority_Districts_(May_2021)_UK_BGC').geometries(), ccrs.epsg(27700),
-                                   linewidth=2, facecolor=(1, 1, 1, 0),
+                                   linewidth=2, facecolor='none',
                                    edgecolor=(0.5, 0.5, 0.5, 1))
 
     roads_SU = ShapelyFeature(
         Reader(DATA_DIR + 'DistrictBoundaries/road_data/SU_RoadLink').geometries(),
         ccrs.epsg(27700),
-        linewidth=1, facecolor=(1, 1, 1, 0),
+        linewidth=1, facecolor='none',
         edgecolor=(0.5, 0.5, 0.5, 1))
 
     roads_TQ = ShapelyFeature(
         Reader(DATA_DIR + 'DistrictBoundaries/road_data/TQ_RoadLink').geometries(),
         ccrs.epsg(27700),
-        linewidth=1, facecolor=(1, 1, 1, 0),
+        linewidth=1, facecolor='none',
         edgecolor=(0.5, 0.5, 0.5, 1))
 
     # Plot 1 - Solo points
@@ -107,6 +107,7 @@ if __name__ == '__main__':
                    y=-0.1,
                    )
     plt.tight_layout()
+    plt.savefig(OUTPUT_DIR + 'BasicModels/none.png', dpi=300)
     plt.show()
 
     # Plot 2 - Loess
@@ -134,7 +135,6 @@ if __name__ == '__main__':
                         cmap='viridis',
                         shading='auto',
                         transform=ccrs.PlateCarree(),
-                        alpha=0.75,
                         )
     fig.suptitle('Interpolation Method: LOESS',
                  x=0.022,
@@ -158,7 +158,8 @@ if __name__ == '__main__':
                  shrink=0.75,
                  anchor=(0, 0.49),
                  ).set_label('pm25')
-    fig.show()
+    plt.savefig(OUTPUT_DIR + 'BasicModels/loess.png', dpi=300)
+    plt.show()
 
     # Plot 3 - Gauss-Seidel
 
@@ -185,9 +186,8 @@ if __name__ == '__main__':
                         cmap='viridis',
                         shading='auto',
                         transform=ccrs.PlateCarree(),
-                        alpha=0.75
                         )
-    fig.suptitle('Interpolation Method: Gauss-Siedel',
+    fig.suptitle('Interpolation Method: Gauss-Seidel',
                  x=0.022,
                  y=0.8,
                  ha='left',
@@ -209,7 +209,8 @@ if __name__ == '__main__':
                  shrink=0.75,
                  anchor=(0, 0.49),
                  ).set_label('pm25')
-    fig.show()
+    plt.savefig(OUTPUT_DIR + 'BasicModels/gs.png', dpi=300)
+    plt.show()
 
     # Plot 4 - IDT
 
@@ -280,6 +281,7 @@ if __name__ == '__main__':
                  shrink=0.75,
                  anchor=(0, 0.49),
                  ).set_label('pm25')
-    fig.show()
+    plt.savefig(OUTPUT_DIR + 'BasicModels/idw.png', dpi=300)
+    plt.show()
 
     a=1
