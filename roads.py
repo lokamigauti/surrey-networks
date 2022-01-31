@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon
+from rasterio.enums import MergeAlg
+import geocube
 from geocube.api.core import make_geocube
 
 DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
@@ -27,9 +29,10 @@ if __name__ == '__main__':
     roads_TQ_outskirts = roads_TQ.clip(woking_outskirts_gdf)
     roads = gpd.GeoDataFrame(pd.concat([roads_SU_outskirts, roads_TQ_outskirts], ignore_index=True))
 
-    # roads.drop(columns=roads.columns.difference(['function']))
+    roads = roads.drop(columns=roads.columns.difference(['function', 'geometry']))
 
-    roads.to_file(DATA_DIR + ROADS + 'roads.shp')
+    roads.to_file(DATA_DIR + ROADS + 'roads.gpkg')
+    roads = gpd.read_file(DATA_DIR + ROADS + 'roads.gpkg')
 
     # Trying to condense the informations in a single raster, without success.
     #
@@ -55,14 +58,15 @@ if __name__ == '__main__':
     # training_df = pd.get_dummies(pdf, columns=['function'])
     # training_df.head()
 
-
+    roads['n'] = 1
     for road_func in roads['function'].unique():
         roads_subset = roads.loc[roads['function'] == road_func]
         out_grid = make_geocube(
             vector_data=roads_subset,
             resolution=RESOLUTION,
+            fill=0,
+            rasterize_function=lambda **kwargs: geocube.rasterize.rasterize_image(**kwargs, merge_alg=MergeAlg.add),
         )
-
         file_name = road_func + '_' + str(RESOLUTION[0]) + 'x' + str(RESOLUTION[1]) + '.tif'
         out_grid.rio.to_raster(DATA_DIR + ROADS + FUNCTIONS + file_name.replace(' ', '_'))
 
