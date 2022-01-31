@@ -1,8 +1,5 @@
 import numpy as np
 
-P_FAR_DIRECTION = 75
-
-
 def calc_pfi(wd, sd, wd_unit='degrees', sd_unit='degrees'):
     """
     Return an np.array with [1, n] dimensions
@@ -14,12 +11,14 @@ def calc_pfi(wd, sd, wd_unit='degrees', sd_unit='degrees'):
     :param sd_unit: analogous as wd_unit for sd, but do not accept vector
     :return: direction difference in radians
     """
+    # Format wd
     if wd_unit == 'degrees':
         wd = wd * np.pi / 180
     if wd_unit == 'vector':
         wd = np.arctan2(wd[1], [0])
     wd = wd % (2 * np.pi)  # reduces angle between 0 and 2 pi
 
+    # Format sd
     if sd_unit == 'degrees':
         sd = sd * np.pi / 180
     sd = sd % (2 * np.pi)  # reduces angle between 0 and 2 pi
