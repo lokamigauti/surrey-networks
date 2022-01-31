@@ -27,7 +27,7 @@ plt.style.use('bmh')
 
 import winsound
 duration = 1000  # milliseconds
-freq = 440  # Hz
+freq = 443  # Hz
 
 class LeoMetrics:
     metrics_dict = {
