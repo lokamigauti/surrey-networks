@@ -30,6 +30,7 @@ if __name__ == '__main__':
     roads = gpd.GeoDataFrame(pd.concat([roads_SU_outskirts, roads_TQ_outskirts], ignore_index=True))
 
     roads = roads.drop(columns=roads.columns.difference(['function', 'geometry']))
+    roads['n'] = 1
 
     roads.to_file(DATA_DIR + ROADS + 'roads.gpkg')
     roads = gpd.read_file(DATA_DIR + ROADS + 'roads.gpkg')
@@ -58,24 +59,24 @@ if __name__ == '__main__':
     # training_df = pd.get_dummies(pdf, columns=['function'])
     # training_df.head()
 
-    roads['n'] = 1
-    for road_func in roads['function'].unique():
-        roads_subset = roads.loc[roads['function'] == road_func]
-        out_grid = make_geocube(
-            vector_data=roads_subset,
-            resolution=RESOLUTION,
-            fill=0,
-            rasterize_function=lambda **kwargs: geocube.rasterize.rasterize_image(**kwargs, merge_alg=MergeAlg.add),
-        )
-        file_name = road_func + '_' + str(RESOLUTION[0]) + 'x' + str(RESOLUTION[1]) + '.tif'
-        out_grid.rio.to_raster(DATA_DIR + ROADS + FUNCTIONS + file_name.replace(' ', '_'))
 
-    roads_minor = roads.loc[roads['function'] == 'Minor Road']
-    roads_minor = roads_minor.filter(['function', 'geometry'])
-
-    minor_grid = make_geocube(
-        vector_data=roads_minor,
-        resolution=RESOLUTION,
-    )
+    # for road_func in roads['function'].unique():
+    #     roads_subset = roads.loc[roads['function'] == road_func]
+    #     out_grid = make_geocube(
+    #         vector_data=roads_subset,
+    #         resolution=RESOLUTION,
+    #         fill=0,
+    #         rasterize_function=lambda **kwargs: geocube.rasterize.rasterize_image(**kwargs, merge_alg=MergeAlg.add),
+    #     )
+    #     file_name = road_func + '_' + str(RESOLUTION[0]) + 'x' + str(RESOLUTION[1]) + '.tif'
+    #     out_grid.rio.to_raster(DATA_DIR + ROADS + FUNCTIONS + file_name.replace(' ', '_'))
+    #
+    # roads_minor = roads.loc[roads['function'] == 'Minor Road']
+    # roads_minor = roads_minor.filter(['function', 'geometry'])
+    #
+    # minor_grid = make_geocube(
+    #     vector_data=roads_minor,
+    #     resolution=RESOLUTION,
+    # )
 
     
