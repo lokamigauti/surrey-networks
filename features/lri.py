@@ -17,15 +17,8 @@ DATA_DIR = 'G:/My Drive/IC/Doutorado/Sandwich/Data/'
 ROADS = 'Roads/'
 RESOLUTION = (100, 100)
 
-# def get_raster_dx_dy(res_x, res_y, lon_min, lon_max, lat_min, lat_max):
-#           gdal data.RasterXSize makes the same
-#           https://gis.stackexchange.com/questions/104362/how-to-get-extent-out-of-geotiff
-#     dx = (lon_max - lon_min) / res_x
-#     dy = (lat_max - lat_min) / res_y
-#     return dx, dy
-
 def advect_roads(wind, roads):
-
+    roads = roads.copy()
     roads['geometry'] = roads.translate(xoff=-wind[0], yoff=-wind[1])
     roads = roads.set_crs(epsg=27700, allow_override=True)
     out_grid = make_geocube(
@@ -36,6 +29,7 @@ def advect_roads(wind, roads):
         rasterize_function=lambda **kwargs: geocube.rasterize.rasterize_image(**kwargs, merge_alg=MergeAlg.add),
     )
     out_grid = out_grid.rio.reproject('EPSG:4326')
+
     ## Debug #
     # file_name = 'A_test' + '_' + str(RESOLUTION[0]) + 'x' + str(RESOLUTION[1]) + 'trans.tif'
     # out_grid.sel(function='A Road').rio.to_raster(DATA_DIR + ROADS + 'Functions/' + file_name.replace(' ', '_'))
@@ -44,4 +38,10 @@ def advect_roads(wind, roads):
 
 if __name__ == '__main__':
     roads = gpd.read_file(DATA_DIR + ROADS + 'roads.gpkg')
-    advect_roads([100, 100], roads)
+    era5 = xr.open_dataset(DATA_DIR + 'ERA5/formatted/era5.nc').isel(longitude=1, latitude=1)
+    lri_list = []
+    for time in era5.time.values:
+        lri = advect_roads([era5.sel(time=time).u10.values, era5.sel(time=time).v10.values], roads)
+        lri_list.append(lri)
+    lri = xr.concat(lri_list, dim='time')
+    lri.to_netcdf(DATA_DIR + ROADS + 'lri.nc')
