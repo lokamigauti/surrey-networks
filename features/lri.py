@@ -24,8 +24,8 @@ RESOLUTION = (100, 100)
 #     dy = (lat_max - lat_min) / res_y
 #     return dx, dy
 
-def advect_roads(wind, roads_file):
-    roads = gpd.read_file(roads_file)
+def advect_roads(wind, roads):
+
     roads['geometry'] = roads.translate(xoff=-wind[0], yoff=-wind[1])
     roads = roads.set_crs(epsg=27700, allow_override=True)
     out_grid = make_geocube(
@@ -43,4 +43,5 @@ def advect_roads(wind, roads_file):
 
 
 if __name__ == '__main__':
-    advect_roads([100, 100], DATA_DIR + ROADS + 'roads.gpkg')
+    roads = gpd.read_file(DATA_DIR + ROADS + 'roads.gpkg')
+    advect_roads([100, 100], roads)
