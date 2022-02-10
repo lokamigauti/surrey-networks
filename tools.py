@@ -104,3 +104,13 @@ def stations_to_lat_lon(pm_path, meta_path, meta_station_col_name='Device/Sensor
     if save:
         p.to_netcdf(save_path)
     return p
+
+def calc_angle_concordance(wind_angle, target_angle, output_path=None):
+    phi = (wind_angle - target_angle)
+    phi = abs(phi)
+    pfi = xr.where(phi > 180, phi - 2 * (phi - 180), phi)
+    pfi = pfi / 180
+
+    if output_path is not None:
+        pfi.to_netcdf(output_path)
+    return pfi
