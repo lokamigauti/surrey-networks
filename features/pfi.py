@@ -1,26 +1,20 @@
 import numpy as np
+import xarray as xr
 
-def calc_pfi(wd, sd, wd_unit='degrees', sd_unit='degrees'):
-    """
-    Return an np.array with [1, n] dimensions
-    containing the difference between the wind direction and the direction of the n known sources
+ERA5 = 'G:/My Drive/IC/Doutorado/Sandwich/Data/ERA5/'
+PFI = 'G:/My Drive/IC/Doutorado/Sandwich/Data/Features/'
 
-    :param wd: np.array of Wind direction in degrees or lat/lon vector
-    :param sd: np.array of source direction in degrees
-    :param wd_unit: string of wd unit. Can be 'degrees', 'radians', or 'vector'
-    :param sd_unit: analogous as wd_unit for sd, but do not accept vector
-    :return: direction difference in radians
-    """
-    # Format wd
-    if wd_unit == 'degrees':
-        wd = wd * np.pi / 180
-    if wd_unit == 'vector':
-        wd = np.arctan2(wd[1], [0])
-    wd = wd % (2 * np.pi)  # reduces angle between 0 and 2 pi
+def calc_pfi(era5, pfar_angle, output_path):
 
-    # Format sd
-    if sd_unit == 'degrees':
-        sd = sd * np.pi / 180
-    sd = sd % (2 * np.pi)  # reduces angle between 0 and 2 pi
+    era5['wind_angle'] = np.degrees(np.arctan2(era5.u10, era5.v10))
+    phi = (era5.wind_angle - pfar_angle)
+    phi = abs(phi)
+    pfi = xr.where(phi > 180, phi-2*(phi-180), phi)
 
-    return sd - wd
+    pfi.to_netcdf(output_path)
+    return pfi
+
+if __name__ == '__main__':
+    era5 = xr.open_dataset(ERA5 + 'formatted/era5.nc')
+
+    calc_pfi(era5, 10, PFI + 'pfi.nc')
