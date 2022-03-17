@@ -15,10 +15,12 @@ ERA5 = 'G:/My Drive/IC/Doutorado/Sandwich/Data/ERA5/'
 PFI = 'G:/My Drive/IC/Doutorado/Sandwich/Data/Features/'
 ROADS = 'Roads/'
 
-OUTSKIRTS_SIZE = 50 / 111139
+OUTSKIRTS_SIZE = 2 / 111.139
 LON_RESOLUTION = 20
-LAT_RESOLUTION = 20
+LAT_RESOLUTION = 10
+N_NEAREST_STATIONS = 3
 
+IDW_P = 2
 
 
 def ord_dist(lon_lat, lcm, n, stationless=False):
@@ -38,6 +40,94 @@ def ord_stat_pm10(lon_lat, lcm, n, stationless=False):
         return pm10
     pm10 = pm10.drop('station')
     return pm10
+
+
+def get_stations_info(lon_lat, lcm, n_stations, skip_first=True):
+    lcm = lcm.copy()
+    dist = np.sqrt((lon_lat.longitude - lcm.longitude) ** 2 + (lon_lat.latitude - lcm.latitude) ** 2)
+    u = lon_lat.longitude - lcm.longitude
+    v = lon_lat.latitude - lcm.latitude
+    angle = np.degrees(np.arctan2(u, v))
+    lcm_dist = lcm.assign_coords(distance=dist, angle=angle).sortby('distance')
+    lcm_pm10_da = lcm_dist.pm10
+    valid = np.argwhere(~np.isnan(lcm_pm10_da.transpose('time', ...)).values).transpose()
+
+    nearest_list = []
+    valid_copy = valid.copy()
+    skipped = False
+    for n in range(n_stations):
+        if skip_first:
+            if not skipped:
+                first_indexes = np.unique(valid_copy[0], return_index=True)[1]
+                valid_copy = np.delete(valid_copy, first_indexes, axis=1)
+            skipped = True
+        first_indexes = np.unique(valid_copy[0], return_index=True)[1]
+        first_time = valid_copy[0, first_indexes]
+        first_station = valid_copy[1, first_indexes]
+        valid_copy = np.delete(valid_copy, first_indexes, axis=1)
+        n_nearest_da = xr.DataArray(data=[first_station], coords=dict(n=[n], time=first_time), dims=['n', 'time']) \
+            .reindex(time=np.arange(lcm_pm10_da.time.__len__()))
+        nearest_list.append(n_nearest_da)
+    nearest_indexes_da = xr.concat(nearest_list, dim='n')
+    nearest_indexes_da['time'] = lcm_dist.time.values
+    nearest_indexes_da = nearest_indexes_da.dropna(dim='time').astype(int)
+
+    for n in range(n_stations):
+        nearest_indexes = nearest_indexes_da.sel(n=n, drop=True)
+        lcm_dist['nearest_monitor_distance_' + str(n)] = lcm_dist.reset_coords('distance').distance \
+            .isel(station=nearest_indexes)
+        lcm_dist['nearest_monitor_angle_' + str(n)] = lcm_dist.reset_coords('angle').angle \
+            .isel(station=nearest_indexes)
+        lcm_dist['nearest_monitor_pm10_' + str(n)] = lcm_dist.pm10.sel(time=nearest_indexes.time) \
+            .isel(station=nearest_indexes)
+        lcm_dist['nearest_monitor_pm25_' + str(n)] = lcm_dist.pm25.sel(time=nearest_indexes.time) \
+            .isel(station=nearest_indexes)
+        lcm_dist['nearest_monitor_pm1_' + str(n)] = lcm_dist.pm1.sel(time=nearest_indexes.time) \
+            .isel(station=nearest_indexes)
+
+    # IDW
+    nearest_monitor_idw_n = 0
+    for n in range(n_stations):
+        nearest_monitor_idw_n = nearest_monitor_idw_n + \
+                                   (lcm_dist['nearest_monitor_pm10_' + str(n)] *
+                                    (lcm_dist['nearest_monitor_distance_' + str(n)] ** IDW_P))
+    nearest_monitor_idw_d = 0
+    for n in range(n_stations):
+        nearest_monitor_idw_d = nearest_monitor_idw_d + \
+                                     (lcm_dist['nearest_monitor_distance_' + str(n)] ** IDW_P)
+    lcm_dist['nearest_monitor_pm10_idw'] = nearest_monitor_idw_n / nearest_monitor_idw_d
+
+    nearest_monitor_idw_n = 0
+    for n in range(n_stations):
+        nearest_monitor_idw_n = nearest_monitor_idw_n + \
+                                (lcm_dist['nearest_monitor_pm25_' + str(n)] *
+                                 (lcm_dist['nearest_monitor_distance_' + str(n)] ** IDW_P))
+    nearest_monitor_idw_d = 0
+    for n in range(n_stations):
+        nearest_monitor_idw_d = nearest_monitor_idw_d + \
+                                (lcm_dist['nearest_monitor_distance_' + str(n)] ** IDW_P)
+    lcm_dist['nearest_monitor_pm25_idw'] = nearest_monitor_idw_n / nearest_monitor_idw_d
+
+    nearest_monitor_idw_n = 0
+    for n in range(n_stations):
+        nearest_monitor_idw_n = nearest_monitor_idw_n + \
+                                (lcm_dist['nearest_monitor_pm1_' + str(n)] *
+                                 (lcm_dist['nearest_monitor_distance_' + str(n)] ** IDW_P))
+    nearest_monitor_idw_d = 0
+    for n in range(n_stations):
+        nearest_monitor_idw_d = nearest_monitor_idw_d + \
+                                (lcm_dist['nearest_monitor_distance_' + str(n)] ** IDW_P)
+    lcm_dist['nearest_monitor_pm1_idw'] = nearest_monitor_idw_n / nearest_monitor_idw_d
+
+
+
+    lcm_dist = lcm_dist.drop_vars(lcm.drop_vars(['time']).variables)
+    lcm_dist = lcm_dist.drop(['distance', 'angle'])
+    out = xr.merge([lon_lat, lcm_dist])
+
+    print('.')
+
+    return out
 
 
 def ord_stat_pm25(lon_lat, lcm, n, stationless=False):
@@ -78,47 +168,101 @@ def calc_lri(lon_lat):
     roads = roads.set_crs(epsg=27700, allow_override=True)
     roads_raster = make_geocube(
         vector_data=roads,
-        resolution=(5, 5),
+        resolution=(50, 50),
         fill=0,
         group_by='function',
         rasterize_function=lambda **kwargs: geocube.rasterize.rasterize_image(**kwargs, merge_alg=MergeAlg.add),
     )
     roads_raster = roads_raster.rio.reproject('EPSG:4326')
-    roads_raster = roads_raster.n.to_dataset(dim='function') \
-        .reset_coords(drop=True)
+    roads_raster = roads_raster.n.to_dataset(dim='function').reset_coords(drop=True)
 
     lon_min = lon_lat.longitude - (OUTSKIRTS_SIZE / 2)
     lon_max = lon_lat.longitude + (OUTSKIRTS_SIZE / 2)
     lat_min = lon_lat.latitude - (OUTSKIRTS_SIZE / 2)
     lat_max = lon_lat.latitude + (OUTSKIRTS_SIZE / 2)
-    lri = roads_raster.sel(x=slice(lon_min, lon_max), y=slice(lat_min, lat_max)).sum()
+    lri = roads_raster.sortby('x').sel(x=slice(lon_min, lon_max)).sortby('y').sel(y=slice(lat_min, lat_max)).sum()
     return lri
 
 
+#
+# def training_dataset_assemble(data, savepath):
+#     data['nearest_monitor'] = data.groupby('station').map(ord_dist, args=(data, 1))
+#     data['2nearest_monitor'] = data.groupby('station').map(ord_dist, args=(data, 2))
+#
+#     data['nearest_monitor_pm10'] = data.groupby('station').map(ord_stat_pm10,
+#                                                                args=(data, 1))
+#     data['2nearest_monitor_pm10'] = data.groupby('station').map(ord_stat_pm10,
+#                                                                 args=(data, 2))
+#
+#     data['nearest_monitor_pm25'] = data.groupby('station').map(ord_stat_pm25,
+#                                                                args=(data, 1))
+#     data['2nearest_monitor_pm25'] = data.groupby('station').map(ord_stat_pm25,
+#                                                                 args=(data, 2))
+#
+#     data['nearest_monitor_pm1'] = data.groupby('station').map(ord_stat_pm1, args=(data, 1))
+#     data['2nearest_monitor_pm1'] = data.groupby('station').map(ord_stat_pm1, args=(data, 2))
+#
+#     data['day_of_week'] = data.time.dt.dayofweek
+#     data['month'] = data.time.dt.month
+#
+#     data['nearest_monitor_angle'] = data.groupby('station').map(ord_stat_angle,
+#                                                                 args=(data, 1))
+#     data['2nearest_monitor_angle'] = data.groupby('station').map(ord_stat_angle,
+#                                                                  args=(data, 2))
+#
+#     era5 = xr.open_dataset(ERA5 + 'formatted/era5.nc')
+#     era5['wind_angle'] = np.degrees(np.arctan2(era5.u10, era5.v10))
+#
+#     era5 = era5.sel(time=slice(data.time.min(),
+#                                data.time.max()))
+#     era5 = era5.sel(time=~era5.get_index('time').duplicated(keep='last'))
+#     wind_angle_central = era5['wind_angle'][:, 1, 1]
+#     wind_angle_central = wind_angle_central.drop_duplicates(dim='time', keep='last').squeeze().reset_coords(
+#         drop=True)
+#     data = xr.merge([data, wind_angle_central])
+#     data['nearest_monitor_angle_wind'] = calc_angle_concordance(data.wind_angle,
+#                                                                 data.nearest_monitor_angle)
+#     data['2nearest_monitor_angle_wind'] = calc_angle_concordance(data.wind_angle,
+#                                                                  data['2nearest_monitor_angle'])
+#
+#     lri = data.groupby('station').map(calc_lri)
+#     data = xr.merge([data, lri])
+#
+#     era5_varslist = list(era5.keys())
+#     sw_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=0, y=0).rename({var: 'sw_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     s_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=1, y=0).rename({var: 's_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     se_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=2, y=0).rename({var: 'se_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     w_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=0, y=1).rename({var: 'w_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     c_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=1, y=1).rename({var: 'c_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     e_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=2, y=1).rename({var: 'e_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     nw_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=0, y=2).rename({var: 'nw_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     n_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=1, y=2).rename({var: 'n_' + var for var in era5_varslist}).reset_coords(drop=True)
+#     ne_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+#         .isel(x=2, y=2).rename({var: 'ne_' + var for var in era5_varslist}).reset_coords(drop=True)
+#
+#     data = xr.merge([data, sw_era5, s_era5, se_era5, w_era5,
+#                      c_era5, e_era5, e_era5, nw_era5, n_era5, ne_era5])
+#
+#     data.to_netcdf(savepath)
+
 def training_dataset_assemble(data, savepath):
-    data['nearest_monitor'] = data.groupby('station').map(ord_dist, args=(data, 1))
-    data['2nearest_monitor'] = data.groupby('station').map(ord_dist, args=(data, 2))
+    data = data.copy()
 
-    data['nearest_monitor_pm10'] = data.groupby('station').map(ord_stat_pm10,
-                                                               args=(data, 1))
-    data['2nearest_monitor_pm10'] = data.groupby('station').map(ord_stat_pm10,
-                                                                args=(data, 2))
+    data = data.groupby('station').map(get_stations_info, args=(data, N_NEAREST_STATIONS))
 
-    data['nearest_monitor_pm25'] = data.groupby('station').map(ord_stat_pm25,
-                                                               args=(data, 1))
-    data['2nearest_monitor_pm25'] = data.groupby('station').map(ord_stat_pm25,
-                                                                args=(data, 2))
+    # data['pm1_idw'] = data.pm1 * data.
 
-    data['nearest_monitor_pm1'] = data.groupby('station').map(ord_stat_pm1, args=(data, 1))
-    data['2nearest_monitor_pm1'] = data.groupby('station').map(ord_stat_pm1, args=(data, 2))
-
+    data['hour_of_day'] = data.time.dt.hour
     data['day_of_week'] = data.time.dt.dayofweek
     data['month'] = data.time.dt.month
-
-    data['nearest_monitor_angle'] = data.groupby('station').map(ord_stat_angle,
-                                                                args=(data, 1))
-    data['2nearest_monitor_angle'] = data.groupby('station').map(ord_stat_angle,
-                                                                 args=(data, 2))
 
     era5 = xr.open_dataset(ERA5 + 'formatted/era5.nc')
     era5['wind_angle'] = np.degrees(np.arctan2(era5.u10, era5.v10))
@@ -130,10 +274,10 @@ def training_dataset_assemble(data, savepath):
     wind_angle_central = wind_angle_central.drop_duplicates(dim='time', keep='last').squeeze().reset_coords(
         drop=True)
     data = xr.merge([data, wind_angle_central])
-    data['nearest_monitor_angle_wind'] = calc_angle_concordance(data.wind_angle,
-                                                                data.nearest_monitor_angle)
-    data['2nearest_monitor_angle_wind'] = calc_angle_concordance(data.wind_angle,
-                                                                 data['2nearest_monitor_angle'])
+    for n in range(N_NEAREST_STATIONS):
+        data['nearest_monitor_angle_wind_' + str(n)] = calc_angle_concordance(data.wind_angle,
+                                                                              data['nearest_monitor_angle_'
+                                                                                   + str(n)])
 
     lri = data.groupby('station').map(calc_lri)
     data = xr.merge([data, lri])
@@ -164,31 +308,61 @@ def training_dataset_assemble(data, savepath):
     data.to_netcdf(savepath)
 
 
-if __name__ == '__main__':
-    lcm_path = OUTPUT_DIR + LCS + 'data_calibrated.nc'
-    lcm = xr.open_dataarray(lcm_path)
-    lcm = lcm.sel(time=~lcm.get_index('time').duplicated(keep='last'))
-    lcm_meta_path = DATA_DIR + LCS + 'Woking Green Party deatils.csv'
-    lcm_meta = pd.read_csv(lcm_meta_path)
-    lcm_coords = lcm_meta[['Device/Sensor Name assigned', 'lat', 'lon']]. \
-        rename(columns={'Device/Sensor Name assigned': 'station'}).set_index('station')
-    lcm = lcm.to_dataset(dim='variable')
-    lcm = lcm.resample(time='1H').mean()
-    lcm = lcm[['pm10_cal', 'pm25_cal', 'pm1_cal', 'rh', 'temp', 'dew', 'wetbulb']]
-    lcm = lcm.rename_vars({'pm10_cal': 'pm10',
-                           'pm25_cal': 'pm25',
-                           'pm1_cal': 'pm1'})
-    lcm['longitude'] = lcm_coords['lon']
-    lcm['latitude'] = lcm_coords['lat']
+def validation_dataset_assemble(training_data, validation_data, savepath):
+    data = training_data.copy()
 
-    lcm_validation = lcm.sel(station=['WokingGreens#2', 'WokingGreens#7', 'WokingGreens#8'])
-    lcm_training = lcm.sel(station=['WokingGreens#1', 'WokingGreens#3', 'WokingGreens#4',
-                                    'WokingGreens#5', 'WokingGreens#6'])
+    validation_data = validation_data.copy()
 
-    training_dataset_assemble(lcm_validation, DATA_DIR + 'Features/validation.nc')
-    training_dataset_assemble(lcm_training, DATA_DIR + 'Features/training.nc')
+    validation_data = validation_data.groupby('station').map(get_stations_info, args=(data, N_NEAREST_STATIONS, False))
 
-    data = lcm.copy()
+    validation_data['hour_of_day'] = validation_data.time.dt.hour
+    validation_data['day_of_week'] = validation_data.time.dt.dayofweek
+    validation_data['month'] = validation_data.time.dt.month
+
+    era5 = xr.open_dataset(ERA5 + 'formatted/era5.nc')
+    era5['wind_angle'] = np.degrees(np.arctan2(era5.u10, era5.v10))
+
+    era5 = era5.sel(time=slice(validation_data.time.min(),
+                               validation_data.time.max()))
+    era5 = era5.sel(time=~era5.get_index('time').duplicated(keep='last'))
+    wind_angle_central = era5['wind_angle'][:, 1, 1]
+    wind_angle_central = wind_angle_central.drop_duplicates(dim='time', keep='last').squeeze().reset_coords(drop=True)
+    validation_data = xr.merge([validation_data, wind_angle_central])
+    for n in range(N_NEAREST_STATIONS):
+        validation_data['nearest_monitor_angle_wind_' + str(n)] = calc_angle_concordance(validation_data.wind_angle,
+                                                                                  validation_data['nearest_monitor_angle_'
+                                                                                           + str(n)])
+
+    lri = validation_data.groupby('station').map(calc_lri)
+    validation_data = xr.merge([validation_data, lri])
+
+    era5_varslist = list(era5.keys())
+    sw_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=0, y=0).rename({var: 'sw_' + var for var in era5_varslist}).reset_coords(drop=True)
+    s_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=1, y=0).rename({var: 's_' + var for var in era5_varslist}).reset_coords(drop=True)
+    se_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=2, y=0).rename({var: 'se_' + var for var in era5_varslist}).reset_coords(drop=True)
+    w_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=0, y=1).rename({var: 'w_' + var for var in era5_varslist}).reset_coords(drop=True)
+    c_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=1, y=1).rename({var: 'c_' + var for var in era5_varslist}).reset_coords(drop=True)
+    e_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=2, y=1).rename({var: 'e_' + var for var in era5_varslist}).reset_coords(drop=True)
+    nw_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=0, y=2).rename({var: 'nw_' + var for var in era5_varslist}).reset_coords(drop=True)
+    n_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=1, y=2).rename({var: 'n_' + var for var in era5_varslist}).reset_coords(drop=True)
+    ne_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
+        .isel(x=2, y=2).rename({var: 'ne_' + var for var in era5_varslist}).reset_coords(drop=True)
+
+    validation_data = xr.merge([validation_data, sw_era5, s_era5, se_era5, w_era5, c_era5, e_era5, e_era5, nw_era5, n_era5, ne_era5])
+
+    validation_data.unstack().to_netcdf(savepath)
+
+
+def map_dataset_assemble(data, savepath):
+    data = data.copy()
 
     lon_list = np.linspace(data.longitude.min(), data.longitude.max(), LON_RESOLUTION)
     lat_list = np.linspace(data.latitude.min(), data.latitude.max(), LAT_RESOLUTION)
@@ -200,25 +374,11 @@ if __name__ == '__main__':
     map_data['latitude'] = map_data.groupby('map_lat').map(lambda x: x.map_lat)
     map_data = map_data.stack(point=('map_lon', 'map_lat'))
 
-    map_data['nearest_monitor'] = map_data.groupby('point').map(ord_dist, args=(data, 0, True))
-    map_data['2nearest_monitor'] = map_data.groupby('point').map(ord_dist, args=(data, 1, True))
+    map_data = map_data.groupby('point').map(get_stations_info, args=(data, N_NEAREST_STATIONS, False))
 
-    a = ord_stat_pm10(map_data.isel(point=0), data, 0, stationless=True)
-
-    map_data['nearest_monitor_pm10'] = map_data.groupby('point').map(ord_stat_pm10, args=(data, 0, True))
-    map_data['2nearest_monitor_pm10'] = map_data.groupby('point').map(ord_stat_pm10, args=(data, 1, True))
-
-    map_data['nearest_monitor_pm25'] = map_data.groupby('point').map(ord_stat_pm25, args=(data, 0, True))
-    map_data['2nearest_monitor_pm25'] = map_data.groupby('point').map(ord_stat_pm25, args=(data, 1, True))
-
-    map_data['nearest_monitor_pm1'] = map_data.groupby('point').map(ord_stat_pm1, args=(data, 0, True))
-    map_data['2nearest_monitor_pm1'] = map_data.groupby('point').map(ord_stat_pm1, args=(data, 1, True))
-
+    map_data['hour_of_day'] = map_data.time.dt.hour
     map_data['day_of_week'] = map_data.time.dt.dayofweek
     map_data['month'] = map_data.time.dt.month
-
-    map_data['nearest_monitor_angle'] = map_data.groupby('point').map(ord_stat_angle, args=(data, 0, True))
-    map_data['2nearest_monitor_angle'] = map_data.groupby('point').map(ord_stat_angle, args=(data, 1, True))
 
     era5 = xr.open_dataset(ERA5 + 'formatted/era5.nc')
     era5['wind_angle'] = np.degrees(np.arctan2(era5.u10, era5.v10))
@@ -229,10 +389,10 @@ if __name__ == '__main__':
     wind_angle_central = era5['wind_angle'][:, 1, 1]
     wind_angle_central = wind_angle_central.drop_duplicates(dim='time', keep='last').squeeze().reset_coords(drop=True)
     map_data = xr.merge([map_data, wind_angle_central])
-    map_data['nearest_monitor_angle_wind'] = calc_angle_concordance(map_data.wind_angle,
-                                                                    map_data.nearest_monitor_angle)
-    map_data['2nearest_monitor_angle_wind'] = calc_angle_concordance(map_data.wind_angle,
-                                                                     map_data['2nearest_monitor_angle'])
+    for n in range(N_NEAREST_STATIONS):
+        map_data['nearest_monitor_angle_wind_' + str(n)] = calc_angle_concordance(map_data.wind_angle,
+                                                                                  map_data['nearest_monitor_angle_'
+                                                                                           + str(n)])
 
     lri = map_data.groupby('point').map(calc_lri)
     map_data = xr.merge([map_data, lri])
@@ -257,10 +417,39 @@ if __name__ == '__main__':
     ne_era5 = era5.rename({'longitude': 'x', 'latitude': 'y'}) \
         .isel(x=2, y=2).rename({var: 'ne_' + var for var in era5_varslist}).reset_coords(drop=True)
 
-    map_data = xr.merge([map_data, sw_era5, s_era5, se_era5, w_era5,
-                     c_era5, e_era5, e_era5, nw_era5, n_era5, ne_era5])
+    map_data = xr.merge([map_data, sw_era5, s_era5, se_era5, w_era5, c_era5, e_era5, e_era5, nw_era5, n_era5, ne_era5])
 
-    map_data.unstack().to_netcdf(DATA_DIR + 'Features/map.nc')
+    map_data.unstack().to_netcdf(savepath)
+
+
+if __name__ == '__main__':
+
+    # map_data = xr.open_dataset(DATA_DIR + 'Features/map.nc')
+    lcm_path = OUTPUT_DIR + LCS + 'data_calibrated.nc'
+    lcm = xr.open_dataarray(lcm_path)
+    lcm = lcm.sel(time=~lcm.get_index('time').duplicated(keep='last'))
+    lcm_meta_path = DATA_DIR + LCS + 'Woking Green Party deatils.csv'
+    lcm_meta = pd.read_csv(lcm_meta_path)
+    lcm_coords = lcm_meta[['Device/Sensor Name assigned', 'lat', 'lon']] \
+        .rename(columns={'Device/Sensor Name assigned': 'station'}).set_index('station')
+    lcm = lcm.to_dataset(dim='variable')
+    lcm = lcm[['pm10_cal', 'pm25_cal', 'pm1_cal', 'rh', 'temp', 'dew', 'wetbulb']]
+    lcm = lcm.rename_vars({'pm10_cal': 'pm10',
+                           'pm25_cal': 'pm25',
+                           'pm1_cal': 'pm1'})
+    lcm['longitude'] = lcm_coords['lon']
+    lcm['latitude'] = lcm_coords['lat']
+
+    lcm_validation = lcm.sel(station=['WokingGreens#2', 'WokingGreens#7', 'WokingGreens#8'])
+    lcm_training = lcm.sel(station=['WokingGreens#1', 'WokingGreens#3', 'WokingGreens#4',
+                                    'WokingGreens#5', 'WokingGreens#6'])
+    training_dataset_assemble(lcm_validation, DATA_DIR + 'Features/validation_altuniverse.nc')
+    training_dataset_assemble(lcm_training, DATA_DIR + 'Features/training.nc')
+    validation_dataset_assemble(lcm_training, lcm_validation, DATA_DIR + 'Features/validation.nc')
+    map_dataset_assemble(lcm, DATA_DIR + 'Features/map.nc')
+
+    print('end of excecution')
+
 
     # # change to 0 for general application
     # lcm_training['nearest_monitor'] = lcm_training.groupby('station').map(ord_dist, args=(lcm_training, 1))
