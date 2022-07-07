@@ -113,4 +113,5 @@ def calc_angle_concordance(wind_angle, target_angle, output_path=None):
 
     if output_path is not None:
         pfi.to_netcdf(output_path)
+
     return pfi

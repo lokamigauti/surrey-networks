@@ -436,7 +436,7 @@ if __name__ == '__main__':
                                          output_path=OUTPUT_DIR + LCS + 'pm_calibrated.nc')
         pm_calibrated = combine_pm_modes(pm_calibrated, drop=False, force_positive=True)
         data = data.combine_first(pm_calibrated)
-        data = data.resample('1H').mean()
+        data = data.resample(time='1H').mean()
         data.to_netcdf(OUTPUT_DIR + LCS + 'data_calibrated.nc')
         csv_path = OUTPUT_DIR + LCS + 'data_calibrated.csv'
         tools.flatten_data(data, sample_dim='time', feature_dim='variable', output_path=csv_path)

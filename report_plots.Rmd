@@ -51,6 +51,35 @@ timevar_cal <- df %>%
 beepr::beep()
 ```
 
+```{r}
+plot(timevar_cal, subset = "hour")
+```
+```{r, fig.width=10}
+plot(timevar_cal, subset = "day")
+```
+
+```{r}
+plot(timevar_cal, subset = "month")
+```
+
+```{r}
+for(n in 1:8){
+  df %>%
+  filter(site==paste0("WokingGreens#", n)) %>%
+  calendarPlot(pol = c("pm1"),
+               cols = c("green", "red"),
+               annotate = "value",
+               type = "site",
+               statistic = "median",
+               labels = c("< 15 ug/m³", "> 15 ug/m³"),
+               breaks = c(0, 15, 1000),
+               main = paste0("WokingGreens#", n))
+}
+
+
+```
+
+
 Hourly statistics
 
 ```{r}
@@ -123,6 +152,8 @@ daily <- df %>%
   summarise(pm1=mean(pm1, na.rm=T),
             pm25=mean(pm25, na.rm=T),
             pm10=mean(pm10, na.rm=T),
+            pm1_25=mean(pm1_25, na.rm=T),
+            pm25_10=mean(pm25_10, na.rm=T),
             prcp=mean(prcp, na.rm=T),
             ws=mean(ws, na.rm=T),
             wd=mean(wd, na.rm=T)) %>%
@@ -316,7 +347,7 @@ for(n in 1:8){
   pm <- df %>%
   filter(site==paste0("WokingGreens#", n)) %>%
     pull(pm25)
-  
+  png(paste0(OUTPUT_DIR, LCS, 'pm25_polarplot_cpf_', n, '.png'), width = 500, height = 500)
   df %>%
   filter(site==paste0("WokingGreens#", n)) %>%
   polarPlot(type = c("site"), col = "magma",
@@ -328,9 +359,21 @@ for(n in 1:8){
           mis.col = "transparent",
           angle.scale = 45,
           units = "m/s")
+  dev.off()
 }
 
 
 beepr::beep()
+```
+
+```{r}
+daily %>%
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = pm1, col = "PM 0-1")) +
+  geom_line(aes(y = pm1_25, col = "PM 1-2.5")) + 
+  geom_line(aes(y = pm25_10, col = "PM 2.5-10")) +
+  facet_wrap(vars(site), scales = "free_y", ncol = 2) +
+  ylab("Concentration (ug/m³)") + xlab("")
+ggsave(paste0(OUTPUT_DIR, LCS, 'concentrations_by_ranges.png'), bg='white', width = 7, height = 7)
 ```
 
